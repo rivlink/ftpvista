@@ -1,0 +1,23 @@
+{{ hits|length }} résultats
+<dl>
+{% for hit in hits %}
+    <dt class="{{ hit.is_online|yesno:"online,offline" }}">
+        <a href="{{ hit.url }}">{{ hit.name }}</a>
+    </dt>
+    <dd>{{ hit.server_name }}</dd>
+    <dd>{{ hit.size|filesizeformat }}</dd>
+
+    {% if  hit.audio_performer %}
+        <dd><span class="bleh">Artiste:</span>{{ hit.audio_performer }}</dd>
+    {% endif %}
+
+    {% if  hit.audio_title %}
+        <dd><span class="bleh">Titre:</span>{{ hit.audio_title }}</dd>
+    {% endif %}
+
+    {% if  hit.audio_album %}
+        <dd><span class="bleh">Album:</span>{{ hit.audio_album }}</dd>
+    {% endif %}
+{% endfor %}
+
+</dl>

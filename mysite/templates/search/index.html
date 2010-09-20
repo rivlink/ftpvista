@@ -1,0 +1,132 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="fr" lang="fr">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <title>
+        FTPVista
+    </title>
+    <link rel="stylesheet" type="text/css" href="http://10.0.0.1/ftpvista3/base.css" media="all" />
+    <link rel="stylesheet" type="text/css" href="http://10.0.0.1/ftpvista3/model04.css" media="screen" />
+    <script type="text/javascript" src="http://10.0.0.1/ftpvista3/mootools.js"></script>
+</head>
+
+<body>
+
+<div id="global">
+
+    <div id="entete">
+        <h1>Kwain</h1>
+        <form action="/search/" method="get">
+            <input id="query" name="query" type="text" value="{{ query }}" />
+            <input type="submit" title="Rechercher" value="Rechercher" />
+        </form>
+    </div><!-- #entete -->
+
+    <div id="navigation">
+        {% if query %}
+        <h3>Filtres</h3>
+        <form action="." method="get">
+            <p>
+                <input id="online_only" name="online_only" type="checkbox" checked="checked" />
+                <label for="online_only">Online uniquement</label>
+            </p>
+            <p>
+                <input id="movie" name="movie" type="checkbox" />
+                <label for="movie">Films</label>
+            </p>
+            <p>
+                <input id="video" name="video" type="checkbox" />
+                <label for="video">Vidéo</label>
+            </p>
+            <p>
+                <input id="audio" name="audio" type="checkbox" />
+                <label for="audio">Audio</label>
+            </p>
+        </form>
+        {% endif %}
+        
+<!--         <h3>Tags</h3> -->
+<!--        Artiste <input type="text" />
+        Titre <input type="text" />
+        Album <input type="text" />-->
+
+    </div><!-- #navigation -->
+
+    <div id="contenu">
+        {% include "search/search_results.html" %}
+    <ul>
+    {% for server in servers %}
+        <li>
+            {{ server.ip }} : {{ server.nb_files }} fichiers, {{ server.files_size|filesizeformat }}
+            , {{ server.last_seen }}
+        </li>
+    {% endfor %}
+    </ul>
+    </div><!-- #contenu -->
+
+    <p id="copyright">
+        FTPVista 3 by Magne & Mc2
+    </p>
+</div><!-- #global -->
+
+<script type="text/javascript">
+window.addEvent('domready', function() {
+
+    function update_results() {
+        search_url = '/search_results/?query={{ query }}'
+        if (!$('online_only').checked)
+            search_url += '&online_filter=0';
+
+        if ($('movie').checked)
+            search_url += '&movie_filter=1';
+
+        if ($('video').checked)
+            search_url += '&video_filter=1';
+
+        if ($('audio').checked)
+            search_url += '&audio_filter=1';
+        
+        var req = new Request.HTML({url:search_url,
+            onSuccess: function(html) {
+                //Clear the text currently inside the results div.
+                $('contenu').set('text', '');
+                //Inject the new DOM elements into the results div.
+                $('contenu').adopt(html);
+                $('contenu').toggleClass('working');
+            },
+            //Our request will most likely succeed, but just in case, we'll add an
+            //onFailure method which will let the user know what happened.
+            onFailure: function() {
+                $('contenu').set('text', 'Request "' + search_url + '" failed');
+                $('contenu').toggleClass('working');
+            }
+        });
+        
+        $('contenu').toggleClass('working');
+        req.send();
+    }
+
+
+    $('online_only').addEvent('click', function() {
+        update_results();
+    });
+
+    $('movie').addEvent('click', function() {
+        update_results();
+    });
+    
+    $('video').addEvent('click', function() {
+        update_results();
+    });
+
+    $('audio').addEvent('click', function() {
+        update_results();
+    });
+
+});
+</script>
+
+</body>
+</html>
