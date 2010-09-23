@@ -12,6 +12,7 @@ from whoosh import index
 from whoosh.fields import Schema, ID, IDLIST, KEYWORD, TEXT
 from whoosh.analysis import StandardAnalyzer
 from whoosh.query import Term
+from whoosh.writing import BatchWriter
 
 import persist as ftpvista_persist
 import pipeline
@@ -31,7 +32,7 @@ class Index (object):
             self._idx = index.open_dir(dir)
 
         self._searcher = self._idx.searcher()
-        self._writer = self._idx.writer()
+        self._writer = BatchWriter(self._idx)
 
     def get_schema(self):
         return Schema(server_id=ID(stored=True),
@@ -61,7 +62,8 @@ class Index (object):
         """
 
         def delete_doc(serverid, path):
-            self._idx.delete_by_query(Term('server_id', serverid) &
+            writer = BatchWriter(self._idx)
+            writer.delete_by_query(Term('server_id', serverid) &
                                       Term('path', path))
 
 
@@ -122,22 +124,21 @@ class Index (object):
 
         if audio_year is not None:
             kwargs['audio_year'] = audio_year
-
+            
         self._writer.add_document(**kwargs)
 
 
     def commit(self):
         """ Commit the changes in the index and optimize it """
-        self._writer.commit()
-        self.log.info('Changes commited')
-
-        self._idx = self._idx.refresh()
+        self.log.info(' -- Begin of Commit -- ')
+        self._idx.writer().commit()
+        self.log.info('Writer commited')
         self._idx.optimize()
-        self.log.info('Index optimized !')
-
+        self.log.info('Index optimized')
+        
         self._searcher = self._idx.searcher()
-        self._writer = self._idx.writer()
-
+        self.log.info(' -- End of Commit -- ')
+        
     def close(self):
         """ Close the index """
         self._idx.close()

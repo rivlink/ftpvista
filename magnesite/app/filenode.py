@@ -1,9 +1,5 @@
 import const as c
 from search_filter import SearchFilterFileTypes
-"""
-    A file node.
-    Used in file tree.
-"""
 
 class FileNode:
     """

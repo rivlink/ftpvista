@@ -53,10 +53,10 @@ class FTPScanner(object):
         else:
             interesting = (permissions[7] == 'r')
 
-        return (permissions[0] == 'd'), interesting
+        return (permissions[0] == 'd'), True
 
     def parse_date(self, date):
-        if re.match(self.DATE_WITH_YEAR_PATTERN, date) :
+        if re.match(self.DATE_WITH_YEAR_PATTERN, date):
             return datetime.strptime(date, '%b %d %Y')
 
         elif re.match(self.DATE_WITH_TIME_PATTERN, date):
@@ -66,7 +66,7 @@ class FTPScanner(object):
             return date.replace(datetime.now().year)
 
         else:
-            self.log.warn('Unknownk date format : %r', date)
+            self.log.warn('Unknown date format : %r', date)
             return None
 
 
@@ -83,8 +83,11 @@ class FTPScanner(object):
         files = []
 
         def parse_line(line):
-            data = line.split(None, 8)
-            permissions, _, uid, gid, size, date1, date2, date3, filename = data
+            try:
+                data = line.split(None, 8)
+                permissions, _, uid, gid, size, date1, date2, date3, filename = data
+            except ValueError:
+                return
             is_dir, interesting = self.parse_permissions(permissions)
             full_path = os.path.join(dir, filename)
 

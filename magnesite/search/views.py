@@ -18,16 +18,16 @@ def filter_online(fileNode):
     return fileNode.isOnline()  
 
 def filter_video(fileNode):
-    return fileNode.getFilename().endswith(('.avi', '.mpg', '.mkv', '.wmv', '.mp4', '.mov', '.3gp', '.3gp2', '.mpeg', '.mpg', '.mpg2', '.ogm'))
+    return fileNode.getFilename().lower().endswith(('.avi', '.mpg', '.mkv', '.wmv', '.mp4', '.mov', '.3gp', '.3gp2', '.mpeg', '.mpg', '.mpg2', '.ogm'))
 
 def filter_audio(fileNode):
-    return fileNode.getFilename().endswith(('.mp3', '.wma', '.cda', '.ogg', '.flac', '.aac', '.aiff', '.m4a', '.wav'))
+    return fileNode.getFilename().lower().endswith(('.mp3', '.wma', '.cda', '.ogg', '.flac', '.aac', '.aiff', '.m4a', '.wav'))
 
 def filter_image(fileNode):
-    return fileNode.getFilename().endswith(('.jpep', '.jpg', '.gif', '.png', '.bmp', '.tiff', '.psd'))
+    return fileNode.getFilename().lower().endswith(('.jpep', '.jpg', '.gif', '.png', '.bmp', '.tiff', '.psd'))
     
 def filter_diskimage(fileNode):
-    return fileNode.getFilename().endswith(('.iso', '.bin', '.cue', '.img', '.mds', '.mdf', '.nrg'))
+    return fileNode.getFilename().lower().endswith(('.iso', '.bin', '.cue', '.img', '.mds', '.mdf', '.nrg'))
     
 def filter_archive(fileNode):
     return re.search('\.(rar|tar|tgz|tz|yz|zz|xz|war|jar|ace|zip|7z|gz(ip){0,1}|bz(ip){0,1}(2){0,1}|r(\d){1,}|deb|rpm)$', fileNode.getFilename(), re.I) != None
@@ -42,6 +42,8 @@ filters = { 'online' : filter_online,
             'movie' : filter_movie
           }
 
+def construction(request):
+    return render_to_response('construction.html')
 
 def index(request):
 

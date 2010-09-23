@@ -8,7 +8,8 @@ from whoosh.qparser import *
 from datetime import datetime, timedelta
 
 # Create your models here.
-
+import sys
+sys.path.append("/home/ftpvista/ftpvista3/ftpvista")
 from persist import FTPVistaPersist
 
 
@@ -37,6 +38,8 @@ def search(query, limit=1000):
     for result in results:
         server_id = int(result['server_id'])
         server = persist.get_server(server_id)
+        if server == None:
+            continue
         server_ip = server.get_ip_addr()
 
         hit = { 'server_id' : server_id,

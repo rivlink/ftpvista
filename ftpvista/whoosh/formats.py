@@ -21,11 +21,11 @@ occurance of a term.
 """
 
 from collections import defaultdict
-from struct import pack, unpack, calcsize
+from struct import Struct
 from cStringIO import StringIO
 
 from whoosh.analysis import unstopped
-from whoosh.system import _INT_SIZE, _USHORT_SIZE, _FLOAT_SIZE
+from whoosh.system import _INT_SIZE, _FLOAT_SIZE, pack_uint, unpack_uint
 from whoosh.util import varint, read_varint, float_to_byte, byte_to_float
 
 
@@ -34,18 +34,18 @@ from whoosh.util import varint, read_varint, float_to_byte, byte_to_float
 class Format(object):
     """Abstract base class representing a storage format for a field or vector.
     Format objects are responsible for writing and reading the low-level
-    representation of a field. It controls what kind/level of information
-    to store about the indexed fields.
+    representation of a field. It controls what kind/level of information to
+    store about the indexed fields.
     """
     
     posting_size = -1
     textual = True
     __inittypes__ = dict(analyzer=object, field_boost=float)
     
-    def __init__(self, analyzer, field_boost = 1.0, **options):
+    def __init__(self, analyzer, field_boost=1.0, **options):
         """
-        :param analyzer: The analysis.Analyzer object to use to index this field.
-            See the analysis module for more information. If this value
+        :param analyzer: The analysis.Analyzer object to use to index this
+            field. See the analysis module for more information. If this value
             is None, the field is not indexed/searchable.
         :param field_boost: A constant boost factor to scale to the score
             of all queries matching terms in this field.
@@ -56,7 +56,9 @@ class Format(object):
         self.options = options
     
     def __eq__(self, other):
-        return self.__class__ is other.__class__ and self.__dict__ == other.__dict__
+        return (other
+                and self.__class__ is other.__class__
+                and self.__dict__ == other.__dict__)
     
     def __repr__(self):
         return "%s(%r, boost = %s)" % (self.__class__.__name__,
@@ -68,12 +70,13 @@ class Format(object):
     
     def word_values(self, value, **kwargs):
         """Takes the text value to be indexed and yields a series of
-        ("tokentext", frequency, valuestring) tuples, where frequency is the
-        number of times "tokentext" appeared in the value, and valuestring is
-        encoded field-specific posting value for the token. For example, in a
-        Frequency format, the value string would be the same as frequency; in
-        a Positions format, the value string would encode a list of token
-        positions at which "tokentext" occured.
+        ("tokentext", frequency, weight, valuestring) tuples, where frequency
+        is the number of times "tokentext" appeared in the value, weight is the
+        weight (a float usually equal to frequency in the absence of per-term
+        boosts) and valuestring is encoded field-specific posting value for the
+        token. For example, in a Frequency format, the value string would be
+        the same as frequency; in a Positions format, the value string would
+        encode a list of token positions at which "tokentext" occured.
         
         :param value: The unicode text to index.
         """
@@ -122,8 +125,8 @@ class Format(object):
 
 class Existence(Format):
     """Only indexes whether a given term occurred in a given document; it does
-    not store frequencies or positions. This is useful for fields that should be
-    searchable but not scorable, such as file path.
+    not store frequencies or positions. This is useful for fields that should
+    be searchable but not scorable, such as file path.
     
     Supports: frequency, weight (always reports frequency = 1).
     """
@@ -131,14 +134,15 @@ class Existence(Format):
     posting_size = 0
     __inittypes__ = dict(analyzer=object, field_boost=float)
     
-    def __init__(self, analyzer, field_boost = 1.0, **options):
+    def __init__(self, analyzer, field_boost=1.0, **options):
         self.analyzer = analyzer
         self.field_boost = field_boost
         self.options = options
     
     def word_values(self, value, **kwargs):
-        return ((w, 1, '') for w
-                in set(t.text for t in unstopped(self.analyzer(value, **kwargs))))
+        wordset = set(t.text for t
+                      in unstopped(self.analyzer(value, **kwargs)))
+        return ((w, 1, 1.0, '') for w in wordset)
     
     def encode(self, value):
         return ''
@@ -157,15 +161,17 @@ class Frequency(Format):
     """
     
     posting_size = _INT_SIZE
-    __inittypes__ = dict(analyzer=object, field_boost=float, boost_as_freq=bool)
+    __inittypes__ = dict(analyzer=object, field_boost=float,
+                         boost_as_freq=bool)
     
-    def __init__(self, analyzer, field_boost = 1.0, boost_as_freq = False, **options):
+    def __init__(self, analyzer, field_boost=1.0, boost_as_freq=False,
+                 **options):
         """
-        :param analyzer: The analysis.Analyzer object to use to index this field.
-            See the analysis module for more information. If this value
+        :param analyzer: The analysis.Analyzer object to use to index this
+            field. See the analysis module for more information. If this value
             is None, the field is not indexed/searchable.
-        :param field_boost: A constant boost factor to scale to the score
-            of all queries matching terms in this field.
+        :param field_boost: A constant boost factor to scale to the score of
+            all queries matching terms in this field.
         :param boost_as_freq: if True, take the integer value of each token's
             boost attribute and use it as the token's frequency.
         """
@@ -178,56 +184,59 @@ class Frequency(Format):
     def word_values(self, value, **kwargs):
         seen = defaultdict(int)
         if self.boost_as_freq:
-            for t in unstopped(self.analyzer(value, boosts = True, **kwargs)):
+            for t in unstopped(self.analyzer(value, boosts=True, **kwargs)):
                 seen[t.text] += int(t.boost)
         else:
             for t in unstopped(self.analyzer(value, **kwargs)):
                 seen[t.text] += 1
         
         encode = self.encode
-        return ((w, freq, encode(freq)) for w, freq in seen.iteritems())
+        return ((w, freq, float(freq), encode(freq))
+                for w, freq in seen.iteritems())
 
     def encode(self, freq):
-        return pack("!I", freq)
+        return pack_uint(freq)
     
     def decode_frequency(self, valuestring):
-        return unpack("!I", valuestring)[0]
+        return unpack_uint(valuestring)[0]
     
     def decode_weight(self, valuestring):
-        freq = unpack("!I", valuestring)[0]
+        freq = unpack_uint(valuestring)[0]
         return freq * self.field_boost
     
 
 class DocBoosts(Frequency):
-    """A Field that stores frequency and per-document boost information for each posting.
+    """A Field that stores frequency and per-document boost information for
+    each posting.
     
     Supports: frequency, weight.
     """
     
     posting_size = _INT_SIZE + 1
     
-    def word_values(self, value, doc_boost = 1.0, **kwargs):
+    def word_values(self, value, doc_boost=1.0, **kwargs):
         seen = defaultdict(int)
         for t in unstopped(self.analyzer(value, **kwargs)):
             seen[t.text] += 1
         
         encode = self.encode
-        return ((w, freq, encode((freq, doc_boost))) for w, freq in seen.iteritems())
+        return ((w, freq, freq * doc_boost, encode((freq, doc_boost)))
+                for w, freq in seen.iteritems())
     
     def encode(self, freq_docboost):
         freq, docboost = freq_docboost
-        return pack("!I", freq) + float_to_byte(docboost)
+        return pack_uint(freq) + float_to_byte(docboost)
     
     def decode_docboosts(self, valuestring):
-        freq = unpack("!I", valuestring[:_INT_SIZE])[0]
+        freq = unpack_uint(valuestring[:_INT_SIZE])[0]
         docboost = byte_to_float(valuestring[-1])
         return (freq, docboost)
     
     def decode_frequency(self, valuestring):
-        return unpack("!I", valuestring[0:_INT_SIZE])[0]
+        return unpack_uint(valuestring[0:_INT_SIZE])[0]
     
     def decode_weight(self, valuestring):
-        freq = unpack("!I", valuestring[:_INT_SIZE])[0]
+        freq = unpack_uint(valuestring[:_INT_SIZE])[0]
         docboost = byte_to_float(valuestring[-1])
         return freq * docboost * self.field_boost
     
@@ -235,20 +244,22 @@ class DocBoosts(Frequency):
 # Vector formats
 
 class Positions(Format):
-    """A vector that stores position information in each posting, to allow phrase
-    searching and "near" queries.
+    """A vector that stores position information in each posting, to allow
+    phrase searching and "near" queries.
     
-    Supports: frequency, weight, positions, position_boosts (always reports position
-    boost = 1.0).
+    Supports: frequency, weight, positions, position_boosts (always reports
+    position boost = 1.0).
     """
     
-    def word_values(self, value, start_pos = 0, **kwargs):
+    def word_values(self, value, start_pos=0, **kwargs):
         seen = defaultdict(list)
-        for t in unstopped(self.analyzer(value, positions = True, start_pos = start_pos, **kwargs)):
+        for t in unstopped(self.analyzer(value, positions=True,
+                                         start_pos=start_pos, **kwargs)):
             seen[t.text].append(start_pos + t.pos)
         
         encode = self.encode
-        return ((w, len(poslist), encode(poslist)) for w, poslist in seen.iteritems())
+        return ((w, len(poslist), float(len(poslist)), encode(poslist))
+                for w, poslist in seen.iteritems())
     
     def encode(self, positions):
         # positions = [pos1, pos2, ...]
@@ -257,11 +268,13 @@ class Positions(Format):
         for pos in positions:
             codes.append(varint(pos - base))
             base = pos
-        return pack("!I", len(positions)) + "".join(codes)
+        return pack_uint(len(positions)) + "".join(codes)
+
+        #return pack_uint(len(positions)) + array("I", positions).tostring()
     
     def decode_positions(self, valuestring):
         read = StringIO(valuestring).read
-        freq = unpack("!I", read(_INT_SIZE))[0]
+        freq = unpack_uint(read(_INT_SIZE))[0]
         position = 0
         positions = []
         for _ in xrange(freq):
@@ -270,7 +283,7 @@ class Positions(Format):
         return positions
     
     def decode_frequency(self, valuestring):
-        return unpack("!I", valuestring[:_INT_SIZE])[0]
+        return unpack_uint(valuestring[:_INT_SIZE])[0]
     
     def decode_weight(self, valuestring):
         return self.decode_frequency(valuestring) * self.field_boost
@@ -280,22 +293,25 @@ class Positions(Format):
     
 
 class Characters(Positions):
-    """Stores token position and character start and end information
-    for each posting.
+    """Stores token position and character start and end information for each
+    posting.
     
-    Supports: frequency, weight, positions, position_boosts (always reports position
-    boost = 1.0), characters.
+    Supports: frequency, weight, positions, position_boosts (always reports
+    position boost = 1.0), characters.
     """
     
-    def word_values(self, value, start_pos = 0, start_char = 0, **kwargs):
+    def word_values(self, value, start_pos=0, start_char=0, **kwargs):
         seen = defaultdict(list)
         
-        for t in unstopped(self.analyzer(value, positions = True, chars = True,
-                                         start_pos = start_pos, start_char = start_char, **kwargs)):
-            seen[t.text].append((t.pos, start_char + t.startchar, start_char + t.endchar))
+        for t in unstopped(self.analyzer(value, positions=True, chars=True,
+                                         start_pos=start_pos,
+                                         start_char=start_char, **kwargs)):
+            seen[t.text].append((t.pos, start_char + t.startchar,
+                                 start_char + t.endchar))
         
         encode = self.encode
-        return ((w, len(ls), encode(ls)) for w, ls in seen.iteritems())
+        return ((w, len(ls), float(len(ls)), encode(ls))
+                for w, ls in seen.iteritems())
     
     def encode(self, posns_chars):
         # posns_chars = [(pos, startchar, endchar), ...]
@@ -305,13 +321,14 @@ class Characters(Positions):
         for pos, startchar, endchar in posns_chars:
             codes.append(varint(pos - posbase))
             posbase = pos
-            codes.extend((varint(startchar - charbase), varint(endchar - startchar)))
+            codes.extend((varint(startchar - charbase),
+                          varint(endchar - startchar)))
             charbase = endchar
-        return pack("!I", len(posns_chars)) + "".join(codes)
+        return pack_uint(len(posns_chars)) + "".join(codes)
     
     def decode_characters(self, valuestring):
         read = StringIO(valuestring).read
-        freq = unpack("!I", read(_INT_SIZE))[0]
+        freq = unpack_uint(read(_INT_SIZE))[0]
         position = 0
         endchar = 0
         posns_chars = []
@@ -323,7 +340,7 @@ class Characters(Positions):
         return posns_chars
     
     def decode_positions(self, valuestring):
-        return [pos for pos, startchar, endchar
+        return [pos for pos, startchar, endchar #@UnusedVariable
                 in self.decode_characters(valuestring)]
     
 
@@ -334,16 +351,21 @@ class PositionBoosts(Positions):
     Supports: frequency, weight, positions, position_boosts.
     """
     
-    def word_values(self, value, start_pos = 0, **kwargs):
+    _struct = Struct("!If")
+    _pack = _struct.pack
+    _unpack = _struct.unpack
+    
+    def word_values(self, value, start_pos=0, **kwargs):
         seen = defaultdict(iter)
-        for t in unstopped(self.analyzer(value, positions = True, boosts = True,
-                                         start_pos = start_pos, **kwargs)):
+        for t in unstopped(self.analyzer(value, positions=True, boosts=True,
+                                         start_pos=start_pos, **kwargs)):
             pos = t.pos
             boost = t.boost
             seen[t.text].append((pos, boost))
         
         encode = self.encode
-        return ((w, len(poslist), encode(poslist)) for w, poslist in seen.iteritems())
+        return ((w, len(poslist), sum(p[1] for p in poslist), encode(poslist))
+                for w, poslist in seen.iteritems())
     
     def encode(self, posns_boosts):
         # posns_boosts = [(pos, boost), ...]
@@ -355,12 +377,12 @@ class PositionBoosts(Positions):
             codes.extend((varint(pos - base), float_to_byte(boost)))
             base = pos
         
-        return pack("!If", len(posns_boosts), summedboost) + "".join(codes)
+        return self._pack(len(posns_boosts), summedboost) + "".join(codes)
     
     def decode_position_boosts(self, valuestring):
         f = StringIO(valuestring)
         read = f.read
-        freq = unpack("!I", read(_INT_SIZE))[0]
+        freq = unpack_uint(read(_INT_SIZE))[0]
         
         # Skip summed boost
         f.seek(_FLOAT_SIZE, 1)
@@ -377,7 +399,7 @@ class PositionBoosts(Positions):
         f = StringIO(valuestring)
         read, seek = f.read, f.seek
         
-        freq = unpack("!I", read(_INT_SIZE))[0]
+        freq = unpack_uint(read(_INT_SIZE))[0]
         # Skip summed boost
         seek(_FLOAT_SIZE, 1)
         
@@ -391,7 +413,7 @@ class PositionBoosts(Positions):
         return positions
     
     def decode_weight(self, valuestring):
-        freq, summedboost = unpack("!If", valuestring[:_INT_SIZE + _FLOAT_SIZE])
+        freq, summedboost = self._unpack(valuestring[:_INT_SIZE + _FLOAT_SIZE])
         return freq * summedboost
     
 
@@ -403,18 +425,24 @@ class CharacterBoosts(Characters):
     character_boosts.
     """
     
-    def word_values(self, value, start_pos = 0, start_char = 0, **kwargs):
+    _struct = Struct("!If")
+    _pack = _struct.pack
+    _unpack = _struct.unpack
+    
+    def word_values(self, value, start_pos=0, start_char=0, **kwargs):
         seen = defaultdict(iter)
-        for t in unstopped(self.analyzer(value, positions = True, characters = True,
-                                         boosts = True,
-                                         start_pos = start_pos, start_char = start_char,
-                                         **kwargs)):
+        for t in unstopped(self.analyzer(value, positions=True,
+                                         characters=True, boosts=True,
+                                         start_pos=start_pos,
+                                         start_char=start_char, **kwargs)):
             seen[t.text].append((t.pos,
-                                 start_char + t.startchar, start_char + t.endchar,
+                                 start_char + t.startchar,
+                                 start_char + t.endchar,
                                  t.boost))
         
         encode = self.encode
-        return ((w, len(poslist), encode(poslist)) for w, poslist in seen.iteritems())
+        return ((w, len(poslist), sum(p[3] for p in poslist), encode(poslist))
+                for w, poslist in seen.iteritems())
     
     def encode(self, posns_chars_boosts):
         # posns_chars_boosts = [(pos, startchar, endchar, boost), ...]
@@ -432,13 +460,14 @@ class CharacterBoosts(Characters):
                           float_to_byte(boost)))
             charbase = endchar
         
-        return pack("!If", len(posns_chars_boosts), summedboost) + "".join(codes)
+        b = self._pack(len(posns_chars_boosts), summedboost)
+        return b + "".join(codes)
     
     def decode_character_boosts(self, valuestring):
         f = StringIO(valuestring)
         read = f.read
         
-        freq = unpack("!I", read(_INT_SIZE))[0]
+        freq = unpack_uint(read(_INT_SIZE))[0]
         # Skip summed boost
         f.seek(_FLOAT_SIZE, 1)
         
@@ -458,11 +487,8 @@ class CharacterBoosts(Characters):
                 in self.decode_character_boosts(valuestring)]
     
     def decode_position_boosts(self, valuestring):
-        return [(pos, boost) for pos, startchar, endchar, boost
+        return [(pos, boost) for pos, startchar, endchar, boost #@UnusedVariable
                 in self.decode_character_boosts(valuestring)]
-    
-
-
 
 
 

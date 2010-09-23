@@ -33,6 +33,14 @@ def search(query, limit=1000):
     parser = MultifieldParser(["name", "path", "audio_performer", "audio_title",
                                "audio_album"],
                               schema=index.schema)
+    parser.add_plugin(PhrasePlugin)
+    parser.add_plugin(SingleQuotesPlugin)
+    parser.add_plugin(MinusNotPlugin)
+    parser.add_plugin(PrefixPlugin)
+    parser.add_plugin(RangePlugin)
+    parser.remove_plugin_class(WildcardPlugin)
+    parser.remove_plugin_class(BoostPlugin)
+    parser.remove_plugin_class(GroupPlugin)
 
     results = searcher.search(parser.parse(query), limit)
     
@@ -48,8 +56,8 @@ def search(query, limit=1000):
                 'is_online' : is_online(server),
                 'name' : result['name'],
                 'url' : 'ftp://%s%s' % (server_ip, result['path']),
-                'size' : int(result['size'])
-                #TODO : mtime
+                'size' : int(result['size']),
+                'mtime' : datetime.strptime(result['mtime'], "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y")
             }
         
         bIsAudio = False
@@ -62,9 +70,9 @@ def search(query, limit=1000):
                     hit[extra] = ""
         
         if bIsAudio:
-            yield AudioFileNode(server_ip, hit['url'], hit['name'], 'xx/xx/xxxx', hit['size'], hit['is_online'], hit['audio_performer'], hit['audio_album'], hit['audio_title'], hit['audio_year'])
+            yield AudioFileNode(server_ip, hit['url'], hit['name'], hit['mtime'], hit['size'], hit['is_online'], hit['audio_performer'], hit['audio_album'], hit['audio_title'], hit['audio_year'])
         else:
-            yield FileNode(server_ip, hit['url'], hit['name'], 'xx/xx/xxxx', hit['size'], hit['is_online'])
+            yield FileNode(server_ip, hit['url'], hit['name'], hit['mtime'], hit['size'], hit['is_online'])
 
 
 def get_servers():

@@ -9,8 +9,8 @@ ADMINS = (
 )
 
 
-WHOOSH_IDX = '/home/fred/ftpvista_antares/idx'
-PERSIST_DB = 'sqlite:////home/fred/ftpvista_antares/ftpvista.db'
+WHOOSH_IDX = '/home/ftpvista/ftpvista_idx'
+PERSIST_DB = 'sqlite:////home/ftpvista/ftpvista.db'
 
 MANAGERS = ADMINS
 
@@ -71,7 +71,7 @@ MIDDLEWARE_CLASSES = (
 ROOT_URLCONF = 'mysite.urls'
 
 TEMPLATE_DIRS = (
-    "/home/fred/narf/mysite/templates",
+    "/home/ftpvista/ftpvista3/mysite/templates",
     # Put strings here, like "/home/html/django_templates" or "C:/www/django/templates".
     # Always use forward slashes, even on Windows.
     # Don't forget to use absolute paths, not relative paths.

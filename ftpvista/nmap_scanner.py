@@ -36,6 +36,7 @@ class FTPFilter(object):
 
         for l in nmap.stdout:
             if UP_FTP_RE.match(l.strip()) :
+                self.log.debug('FTP Exists !')
                 return True
         return False
 

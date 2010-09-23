@@ -2,6 +2,8 @@
 from django.conf.urls.defaults import *
 import app.const as c
 
+UNDER_CONSTRUCTION = True
+
 urlpatterns = patterns('',
     (r'^'+c.sPrefix+'$', 'magnesite.search.views.index'),
     (r'^'+c.sPrefix+'search/$', 'magnesite.search.views.search'),
@@ -10,3 +12,10 @@ urlpatterns = patterns('',
     (r'^'+c.sPrefix+'images/(?P<path>.*)$', 'django.views.static.serve', {'document_root': c.path+'templates/images'}),
     (r'^'+c.sPrefix+'css/(?P<path>.*)$', 'django.views.static.serve', {'document_root': c.path+'templates/css'})
 )
+
+if UNDER_CONSTRUCTION:
+    urlpatterns = patterns('',
+        (r'^'+c.sPrefix+'$', 'magnesite.search.views.construction'),
+        (r'^'+c.sPrefix+'search/$', 'magnesite.search.views.construction'),
+        (r'^'+c.sPrefix+'search_results/$', 'magnesite.search.views.construction')
+    )
