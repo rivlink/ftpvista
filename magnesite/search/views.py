@@ -7,7 +7,6 @@ from django.shortcuts import render_to_response
 
 from magnesite.search import models
 
-from app.filetree import FileTree
 from app.search_filter import SearchFilterFileTypes
 import app.const as c
 
