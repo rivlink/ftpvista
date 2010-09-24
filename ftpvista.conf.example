@@ -1,0 +1,27 @@
+[logs]
+logfile=ftpvista.log
+
+[db]
+# URI of the database to store infos about the servers
+# the URI format is the one used by sql-alchemy 
+uri=sqlite:////dev/shm/ftpvista.db
+
+[index]
+# Path of the index to store terms from the files found on the servers
+uri=/dev/shm/idx
+
+[indexer]
+# user id to set for the indexer process
+uid=
+
+# group id to set for the indexer process
+gid=
+
+# optional comma-separated list of IP to blacklist
+#blacklist=
+
+# IP addresses considered as valid, others will be ignored
+valid_ip_pattern=^10.0.0.1|(10.(6|8|82|83|10|11).\d{0,3}.\d{0,3})$
+
+# Minimum interval in hours between two indexations of the same FTP server
+min_update_interval=24
