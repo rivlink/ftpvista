@@ -2,7 +2,7 @@
 from django.conf.urls.defaults import *
 import app.const as c
 
-UNDER_CONSTRUCTION = True
+UNDER_CONSTRUCTION = False
 
 urlpatterns = patterns('',
     (r'^'+c.sPrefix+'$', 'magnesite.search.views.index'),

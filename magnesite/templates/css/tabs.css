@@ -42,7 +42,7 @@ ul.tabs a:hover {
 ul.tabs a.current {
 	background-color:#595959;
 	border-bottom:2px solid #595959;
-	color:#white;
+	color:white;
 	cursor:default;
 }
 
