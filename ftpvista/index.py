@@ -62,7 +62,7 @@ class Index (object):
         """
 
         def delete_doc(serverid, path):
-            writer = BatchWriter(self._idx)
+            writer = self._idx.writer()
             writer.delete_by_query(Term('server_id', serverid) &
                                       Term('path', path))
 
