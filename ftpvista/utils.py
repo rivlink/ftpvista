@@ -66,5 +66,5 @@ class Servers:
         correspondences = Servers.get_correspondences()
         for ip, surnom in correspondences:
             if sIP == ip:
-                return surnom + "(" + ip + ")"
+                return ip + " - " + surnom
         return sIP
