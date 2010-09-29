@@ -56,7 +56,7 @@
 				  $($(this).parents("tr")[0]).trigger("mousedown");
 				});
 
-				//Customized Multiselect
+				//Custom Multiselect
 				$("#ft").multiSelect({
 					oneOrMoreSelected: '*',
 					selectAllText: 'Tous',
@@ -109,9 +109,13 @@
 						</div>
 					</div>
 					<div class="pane">
-						<p>
-							Liste des serveurs
-						</p>
+						<ul class="server_list">
+							{% for server in servers %}
+								{% autoescape off %}
+								<li><a href="ftp://{{ server.get_ip_addr }}">{{ server.get_ip_with_name }}</a></li>
+								{% endautoescape %}
+							{% endfor %}
+						</ul>
 					</div>
 				    <div class="pane">
 				    	<a href="#" class="plus_sign">-</a>

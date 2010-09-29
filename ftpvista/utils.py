@@ -3,6 +3,7 @@
 MOST_POPULAR_ENCODINGS = ['utf_8', 'ascii', 'iso8859_2']
 
 import locale
+import app.const as c
 
 def to_unicode(text, charset=None):
     """Convert a `str` object to an `unicode` object.
@@ -42,3 +43,28 @@ def to_unicode(text, charset=None):
 
         return unicode(text, locale.getpreferredencoding(), 'replace')
 
+class Servers:
+    
+    correspondences = None
+    
+    @staticmethod
+    def fetch_correspondences():
+        Servers.correspondences = list()
+        f = open(c.path + '../correspondences.ftp','r')
+        for line in f.readlines():
+            Servers.correspondences.append(line.split('\t'))
+        f.close()
+    
+    @staticmethod
+    def get_correspondences():
+        if Servers.correspondences == None:
+            Servers.fetch_correspondences()
+        return Servers.correspondences
+    
+    @staticmethod
+    def get_ip_with_name(sIP):
+        correspondences = Servers.get_correspondences()
+        for ip, surnom in correspondences:
+            if sIP == ip:
+                return surnom + "(" + ip + ")"
+        return sIP

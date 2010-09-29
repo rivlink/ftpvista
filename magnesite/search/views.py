@@ -60,6 +60,7 @@ def index(request):
     return render_to_response('index.html', {'sPrefix' : c.sPrefix,
                                              'servers' : servers,
                                              'sTrId': u'node-',
+                                             'servers': models.get_servers(),
                                              'aFilterFileTypes': SearchFilterFileTypes.getFileTypes()})
 
 
@@ -101,6 +102,7 @@ def search(request):
                                              'query' : query,
                                              'aFileNodes': filteredFileNodes,
                                              'sTrId': u'node-',
+                                             'servers': models.get_servers(),
                                              'aFilterFileTypes': SearchFilterFileTypes.getFileTypes()})
 
 

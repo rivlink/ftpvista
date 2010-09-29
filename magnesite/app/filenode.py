@@ -1,5 +1,6 @@
 import const as c
 from search_filter import SearchFilterFileTypes
+from utils import Servers
 
 class FileNode:
     """
@@ -20,6 +21,7 @@ class FileNode:
         self.sSize = sSize
         self.bIsOnline = bIsOnline
         self.bAudio = False;
+        FileNode.correspondences = None;
     
     def getDate(self):
         return self.sDate
@@ -45,18 +47,12 @@ class FileNode:
     def getServerURL(self):
         return "ftp://" + self.sFTP
     
-    #TODO: Put this in a "config" file
     def getServer(self):
-        if (self.sFTP.startswith("10.83.75")):
-            return "Tadeus (" + self.sFTP + ")"
-        if (self.sFTP.startswith("10.83.49")):
-            return "Magne (" + self.sFTP + ")"
-        if (self.sFTP.startswith("10.8.39")):
-            return "Dustri (" + self.sFTP + ")"
-        if (self.sFTP.startswith("10.82.42")):
-            return "Boko (" + self.sFTP + ")"
-        if (self.sFTP.startswith("10.11.20")):
-            return "Zaure (" + self.sFTP + ")"
+        correspondences = Servers.get_correspondences()
+        for ip, surnom in correspondences:
+            if self.sFTP == ip:
+                return surnom + "(" + ip + ")"
+        
         return self.sFTP
     
     def isOnline(self):

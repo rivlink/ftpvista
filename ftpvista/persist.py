@@ -6,6 +6,8 @@ from datetime import timedelta
 from sqlalchemy import *
 from sqlalchemy.orm import mapper, sessionmaker
 
+from utils import Servers
+
 def never_date():
     """Helper that returns a DateTime object pointing to Epoch.
 
@@ -27,7 +29,6 @@ def build_tables(meta):
         )
 
     return ftpservers
-
 
 class FTPServer (object):
     def __init__(self, ip_addr):
@@ -62,6 +63,9 @@ class FTPServer (object):
 
     def set_files_size(self, files_size):
         self.files_size = files_size
+    
+    def get_ip_with_name(self):
+        return Servers.get_ip_with_name(self.ip)
 
 
 class FTPVistaPersist(object):
