@@ -1,11 +1,7 @@
 # -*- coding: utf-8 -*-
-import sys
-sys.path.append("/home/ftpvista/ftpvista3/ftpvista")
-
 MOST_POPULAR_ENCODINGS = ['utf_8', 'ascii', 'iso8859_2']
 
 import locale
-import app.const as c
 
 def to_unicode(text, charset=None):
     """Convert a `str` object to an `unicode` object.
@@ -52,7 +48,7 @@ class Servers:
     @staticmethod
     def fetch_correspondences():
         Servers.correspondences = list()
-        f = open(c.path + '../correspondences.ftp','r')
+        f = open('/home/ftpvista/ftpvista3/correspondences.ftp','r')
         for line in f.readlines():
             Servers.correspondences.append(line.split('\t'))
         f.close()
