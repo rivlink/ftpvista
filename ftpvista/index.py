@@ -12,6 +12,7 @@ from whoosh import index
 from whoosh.fields import Schema, ID, IDLIST, KEYWORD, TEXT
 from whoosh.analysis import StandardAnalyzer
 from whoosh.query import Term
+from whoosh.writing import AsyncWriter
 
 import persist as ftpvista_persist
 import pipeline
@@ -31,7 +32,7 @@ class Index (object):
             self._idx = index.open_dir(dir)
 
         self._searcher = self._idx.searcher()
-        self._writer = self._idx.writer()
+        self._writer = AsyncWriter(self._idx, 2)
 
     def get_schema(self):
         return Schema(server_id=ID(stored=True),
@@ -130,7 +131,7 @@ class Index (object):
     def commit(self):
         """ Commit the changes in the index and optimize it """
         self.log.info(' -- Begin of Commit -- ')
-        self._idx.writer().commit()
+        self._writer.commit()
         self.log.info('Writer commited')
         self._idx.optimize()
         self.log.info('Index optimized')
