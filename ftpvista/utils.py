@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import sys
-sys.path.append("/home/ftpvista/ftpvista3/ftpvista/magnesite")
+sys.path.append("/home/ftpvista/ftpvista3/ftpvista")
 
 MOST_POPULAR_ENCODINGS = ['utf_8', 'ascii', 'iso8859_2']
 
