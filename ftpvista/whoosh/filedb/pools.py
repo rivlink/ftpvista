@@ -15,7 +15,7 @@
 # limitations under the License.
 #===============================================================================
 
-import base64, os, random, tempfile
+import os, random, string, tempfile
 from array import array
 from collections import defaultdict
 from heapq import heapify, heappush, heappop
@@ -25,10 +25,10 @@ from whoosh.filedb.filetables import LengthWriter, LengthReader
 from whoosh.util import length_to_byte, now
 
 
-def unique_name():
-    return base64.urlsafe_b64encode("".join(chr(random.randint(0, 255))
-                                            for _ in xrange(18)))
-
+_unique_name_chars = string.ascii_letters + string.digits + "_"
+def unique_name(length=16):
+    return "".join(random.choice(_unique_name_chars) for _ in xrange(length))
+    
 
 def imerge(iterators):
     """Merge-sorts items from a list of iterators.
@@ -214,7 +214,6 @@ class TempfilePool(PoolBase):
         
     def add_posting(self, fieldname, text, docnum, weight, valuestring):
         if self.size >= self.limit:
-            #print "Flushing..."
             self.dump_run()
 
         self.size += len(fieldname) + len(text) + 18
@@ -226,7 +225,7 @@ class TempfilePool(PoolBase):
     def dump_run(self):
         if self.size > 0:
             #print "Dumping run..."
-            #t = now()
+            t = now()
             filename = self.unique_name(".run")
             runfile = open(filename, "w+b")
             self.postings.sort()
@@ -265,6 +264,7 @@ class TempfilePool(PoolBase):
             elif not self.postings and not self.runs:
                 postiter = iter([])
             else:
+                self.dump_run()
                 postiter = imerge([read_run(runname, count)
                                    for runname, count in self.runs])
         
