@@ -2,11 +2,7 @@
 
 import re
 
-# starting from scapy version 2 modules must be imported from scapy.all
-try:
-    from scapy import sniff, ARP
-except ImportError:
-    from scapy.all import sniff, ARP
+from scapy.all import sniff, ARP
 
 import observer
 import pipeline
