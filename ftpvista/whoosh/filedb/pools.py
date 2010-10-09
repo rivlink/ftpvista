@@ -141,6 +141,11 @@ class PoolBase(object):
         self._fieldlength_totals = defaultdict(int)
         self._fieldlength_maxes = {}
     
+    # Magne - 2010-10-09
+    def __del__(self):
+        os.removedirs(self.dir)
+    # End Magne
+    
     def _filename(self, name):
         return os.path.abspath(os.path.join(self.dir, self.basename + name))
     
