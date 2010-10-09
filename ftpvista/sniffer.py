@@ -26,9 +26,8 @@ class ARPSniffer (observer.Observable):
         sniff(filter="arp", prn=self._arp_callback, store=0)
 
     def _arp_callback(self, pkt):
-        if ARP in pkt:
-            self.notify_observers(pkt[ARP].psrc)
-            self.notify_observers(pkt[ARP].pdst)   # FIXME : is this necessary ?
+        self.notify_observers(pkt[ARP].psrc)
+        self.notify_observers(pkt[ARP].pdst)   # FIXME : is this necessary ?
 
 
 class SnifferToPipelineAdapter (observer.Observer):
