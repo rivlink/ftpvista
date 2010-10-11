@@ -274,24 +274,6 @@ def build_indexer_pipeline(server_id, server_addr, index):
 
     return pipe
 
-class OnlineUpdater(Thread):
-    """Check if the FTP is online every 10 minutes"""
-    def __init__ (self, server):
-        Thread.__init__(self)
-        self._server = server
-        self._scanner = nmap_scanner.FTPFilter()
-        self.log = logging.getLogger('ftpvista.coordinator')
-    
-    def run(self):
-        self.log.info('Server %s online checking ON.' % self._server.get_ip_addr())
-        self.check()
-        Timer(60 * 10, self.check)
-    
-    def check(self):
-        if self._scanner.is_ftp_open(self._server.get_ip_addr()):
-            self._server.update_last_seen()
-            self.log.info('Server %s is online. Last seen value updated to now!' % self._server.get_ip_addr())
-
 class IndexUpdateCoordinator(object):
     """Coordinate the scanning and indexing of FTP servers."""
 
@@ -308,7 +290,6 @@ class IndexUpdateCoordinator(object):
         self._persist = persist
         self._index = index
         self._update_interval = min_update_interval
-        self._online_updater = None
 
     def update_server(self, server_addr):
         """Update the server at the given address if an update is needed."""
@@ -316,14 +297,8 @@ class IndexUpdateCoordinator(object):
 
         if(datetime.now() - server.get_last_scanned()) >= self._update_interval:
             self._do_update(server)
-            
-        """This thread check if the FTP is online every 10 minutes"""
-        if self._online_updater is None:
-            self._online_updater = OnlineUpdater(server)
-            self._online_updater.start()
         
         self._persist.save()
-
 
     def _do_update(self, server):
         server_addr = server.get_ip_addr()

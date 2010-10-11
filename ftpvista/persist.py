@@ -7,6 +7,7 @@ from sqlalchemy import *
 from sqlalchemy.orm import mapper, sessionmaker
 
 from utils import Servers
+import nmap_scanner
 
 def never_date():
     """Helper that returns a DateTime object pointing to Epoch.
@@ -66,6 +67,8 @@ class FTPServer (object):
     
     def get_ip_with_name(self):
         return Servers.get_ip_with_name(self.ip)
+    
+    
 
 class FTPVistaPersist(object):
     def __init__(self, db_uri):
@@ -77,6 +80,9 @@ class FTPVistaPersist(object):
 
         self.servers = build_tables(self.meta)
         mapper(FTPServer, self.servers)
+        
+        self._scanner = nmap_scanner.FTPFilter()
+        self.launch_online_checker()
 
     def initialize_store(self):
         self.meta.create_all()
@@ -97,6 +103,19 @@ class FTPVistaPersist(object):
 
     def get_servers(self):
         return self.session.query(FTPServer).all()
+    
+    def launch_online_checker(self):
+        """Timer launched every 10 minutes to check if servers in database are online"""
+        self.check()
+        Timer(60 * 10, self.check)
+    
+    def check(self):
+        servers = self.get_servers()
+        for server in servers:
+            if self._scanner.is_ftp_open(server.get_ip_addr()):
+                server.update_last_seen()
+                self.log.info('Server %s is online. Last seen value updated to now!' % self._server.get_ip_addr())
+        self.save()
 
     def save(self):
         self.session.commit()
