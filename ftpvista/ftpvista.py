@@ -10,6 +10,7 @@ import os
 import time
 
 from index import Index, IndexUpdateCoordinator
+from persist import FTPVista
 import persist as ftpvista_persist
 import pipeline
 import observer
@@ -79,7 +80,7 @@ def main(config_file='ftpvista.conf'):
     persist = ftpvista_persist.FTPVistaPersist(db_uri)
     persist.initialize_store()
     
-    Index.persist = persist
+    FTPVista.set_persist(persist)
 
     # Full-text index for storing terms from the files found on the servers
     index_uri = config.get('index', 'uri')
@@ -87,6 +88,7 @@ def main(config_file='ftpvista.conf'):
 
     # This defines how and at which period to perform updates from the servers
     min_update_interval = config.getint('indexer', 'min_update_interval')
+    
     update_coordinator = IndexUpdateCoordinator(
                            persist, index, timedelta(hours=min_update_interval))
 
