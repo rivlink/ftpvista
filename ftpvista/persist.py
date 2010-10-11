@@ -86,13 +86,14 @@ class FTPVistaPersist(object):
         except ArgumentError:
             pass
         
-        if check_online:
-            self.log = logging.getLogger('ftpvista.coordinator')
-            self._scanner = nmap_scanner.FTPFilter()
-            self.launch_online_checker()
+        self.check_online = check_online
 
     def initialize_store(self):
         self.meta.create_all()
+        if self.check_online:
+            self.log = logging.getLogger('ftpvista.coordinator')
+            self._scanner = nmap_scanner.FTPFilter()
+            self.launch_online_checker()
 
     def get_server_by_ip(self, ip_addr):
         server = self.session.query(FTPServer).filter_by(ip=ip_addr).first()
