@@ -283,6 +283,7 @@ class OnlineUpdater(Thread):
         self.log = logging.getLogger('ftpvista.coordinator')
     
     def run(self):
+        self.log.info('Server %s online checking ON.' % self._server.get_ip_addr())
         self.check()
         Timer(60 * 10, self.check)
     
