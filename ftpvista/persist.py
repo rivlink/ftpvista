@@ -116,7 +116,7 @@ class FTPVistaPersist(object):
         for server in servers:
             if self._scanner.is_ftp_open(server.get_ip_addr()):
                 server.update_last_seen()
-                self.log.info('Server %s is online. Last seen value updated to now!' % self._server.get_ip_addr())
+                self.log.info('Server %s is online. Last seen value updated to now!' % server.get_ip_addr())
         self.save()
 
     def save(self):
