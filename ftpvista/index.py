@@ -280,6 +280,7 @@ class OnlineUpdater(Thread):
         Thread.__init__(self)
         self._server = server
         self._scanner = nmap_scanner.FTPFilter()
+        self.log = logging.getLogger('ftpvista.coordinator')
     
     def run(self):
         self.check()
@@ -288,6 +289,7 @@ class OnlineUpdater(Thread):
     def check(self):
         if self._scanner.is_ftp_open(self._server.get_ip_addr()):
             self._server.update_last_seen()
+            self.log.info('Server %s is online. Last seen value updated to now!' % self._server.get_ip_addr())
 
 class IndexUpdateCoordinator(object):
     """Coordinate the scanning and indexing of FTP servers."""
