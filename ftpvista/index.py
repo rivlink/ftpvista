@@ -286,7 +286,7 @@ class OnlineUpdater(Thread):
         Timer(60 * 10, self.check)
     
     def check(self):
-        if self._scanner.is_ftp_open(ip_addr):
+        if self._scanner.is_ftp_open(self._server.get_ip_addr()):
             self._server.update_last_seen()
 
 class IndexUpdateCoordinator(object):
