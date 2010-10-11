@@ -2,6 +2,8 @@
 
 import re
 
+import sys
+sys.path.append("/home/ftpvista/ftpvista3/ftpvista")
 from magnesite import settings
 
 from scapy.all import sniff, ARP
