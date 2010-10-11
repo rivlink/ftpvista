@@ -76,7 +76,7 @@ def main(config_file='ftpvista.conf'):
 
     # Create the DB to store informations about the FTP servers
     db_uri = config.get('db', 'uri')
-    persist = ftpvista_persist.FTPVistaPersist(db_uri)
+    persist = ftpvista_persist.FTPVistaPersist(db_uri, True)
     persist.initialize_store()
 
     # Full-text index for storing terms from the files found on the servers

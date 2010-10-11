@@ -72,7 +72,7 @@ class FTPServer (object):
     
 
 class FTPVistaPersist(object):
-    def __init__(self, db_uri):
+    def __init__(self, db_uri, check_online=False):
         self.engine = create_engine(db_uri)
         self.meta = MetaData(self.engine)
 
@@ -82,9 +82,10 @@ class FTPVistaPersist(object):
         self.servers = build_tables(self.meta)
         mapper(FTPServer, self.servers)
         
-        self.log = logging.getLogger('ftpvista.coordinator')
-        self._scanner = nmap_scanner.FTPFilter()
-        self.launch_online_checker()
+        if check_online:
+            self.log = logging.getLogger('ftpvista.coordinator')
+            self._scanner = nmap_scanner.FTPFilter()
+            self.launch_online_checker()
 
     def initialize_store(self):
         self.meta.create_all()
