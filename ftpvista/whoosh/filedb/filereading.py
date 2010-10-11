@@ -65,7 +65,7 @@ class SegmentReader(IndexReader):
                                                mapped=False)
         
         self.dc = segment.doc_count_all()
-        #assert self.dc == self.storedfields.length
+        """assert self.dc == self.storedfields.length"""
         
         self.is_closed = False
         self._sync_lock = Lock()
