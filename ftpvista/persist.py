@@ -80,7 +80,11 @@ class FTPVistaPersist(object):
         self.session = Session()
 
         self.servers = build_tables(self.meta)
-        mapper(FTPServer, self.servers)
+        
+        try:
+            mapper(FTPServer, self.servers)
+        except ArgumentError:
+            pass
         
         if check_online:
             self.log = logging.getLogger('ftpvista.coordinator')
