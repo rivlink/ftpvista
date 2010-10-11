@@ -19,7 +19,6 @@ def init_persist(config_file='ftpvista.conf'):
     config.read(config_file)
     db_uri = config.get('db', 'uri')
     persist = ftpvista_persist.FTPVistaPersist(db_uri)
-    persist.initialize_store()
     return persist
 
 persist = init_persist()
