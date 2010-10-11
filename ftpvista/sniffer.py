@@ -2,8 +2,7 @@
 
 import re
 
-from django.db import models
-from django.conf import settings
+from magnesite import settings
 
 from scapy.all import sniff, ARP
 
