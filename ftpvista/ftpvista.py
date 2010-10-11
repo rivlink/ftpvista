@@ -15,7 +15,6 @@ import pipeline
 import observer
 from sniffer import *
 
-
 class PutInQueueStage (pipeline.Stage):
     """Put all the recieved  IP addresses in the specified queue"""
     def __init__(self, queue):
@@ -36,9 +35,6 @@ def sniffer_task(queue, blacklist, valid_ip_pattern):
     
     # Run sniffer, run ..
     sniffer.run()
-
-def get_persist():
-    return ftpvista.persist
 
 def main(config_file='ftpvista.conf'):
     config = ConfigParser.SafeConfigParser()
@@ -83,7 +79,7 @@ def main(config_file='ftpvista.conf'):
     persist = ftpvista_persist.FTPVistaPersist(db_uri)
     persist.initialize_store()
     
-    ftpvista.persist = persist
+    Index.persist = persist
 
     # Full-text index for storing terms from the files found on the servers
     index_uri = config.get('index', 'uri')

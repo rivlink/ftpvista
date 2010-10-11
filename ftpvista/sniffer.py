@@ -12,7 +12,7 @@ from pipeline import Pipeline
 from timedcache import TimedCache
 import nmap_scanner
 
-import ftpvista
+from index import Index
 
 class ARPSniffer (observer.Observable):
     """Finds the connected hosts by sniffing the ARP packets.
@@ -94,8 +94,7 @@ class FTPServerFilter (pipeline.Stage):
 
     def execute(self, ip_addr):
         if self._scanner.is_ftp_open(ip_addr):
-            persist = ftpvista.get_persist()
-            server = persist.get_server_by_ip(ip_addr)
+            server = Index.persist.get_server_by_ip(ip_addr)
             server.update_last_seen()
             return True
         return False
