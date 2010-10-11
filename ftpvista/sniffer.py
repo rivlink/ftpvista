@@ -12,16 +12,7 @@ from pipeline import Pipeline
 from timedcache import TimedCache
 import nmap_scanner
 
-import persist as ftpvista_persist
-
-def init_persist(config_file='ftpvista.conf'):
-    config = ConfigParser.SafeConfigParser()
-    config.read(config_file)
-    db_uri = config.get('db', 'uri')
-    persist = ftpvista_persist.FTPVistaPersist(db_uri)
-    return persist
-
-persist = init_persist()
+import ftpvista
 
 class ARPSniffer (observer.Observable):
     """Finds the connected hosts by sniffing the ARP packets.
@@ -103,6 +94,7 @@ class FTPServerFilter (pipeline.Stage):
 
     def execute(self, ip_addr):
         if self._scanner.is_ftp_open(ip_addr):
+            persist = ftpvista.get_persist()
             server = persist.get_server_by_ip(ip_addr)
             server.update_last_seen()
             return True

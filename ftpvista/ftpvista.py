@@ -37,6 +37,8 @@ def sniffer_task(queue, blacklist, valid_ip_pattern):
     # Run sniffer, run ..
     sniffer.run()
 
+def get_persist():
+    return self.persist
 
 def main(config_file='ftpvista.conf'):
     config = ConfigParser.SafeConfigParser()
@@ -80,6 +82,8 @@ def main(config_file='ftpvista.conf'):
     db_uri = config.get('db', 'uri')
     persist = ftpvista_persist.FTPVistaPersist(db_uri)
     persist.initialize_store()
+    
+    self.persist = persist
 
     # Full-text index for storing terms from the files found on the servers
     index_uri = config.get('index', 'uri')
