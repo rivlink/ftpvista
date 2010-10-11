@@ -14,7 +14,7 @@ import nmap_scanner
 
 import persist as ftpvista_persist
 
-def init_persist():
+def init_persist(config_file='ftpvista.conf'):
     config = ConfigParser.SafeConfigParser()
     config.read(config_file)
     db_uri = config.get('db', 'uri')
