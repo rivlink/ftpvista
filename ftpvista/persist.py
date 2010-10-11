@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import logging
 from datetime import datetime
 from datetime import timedelta
 
@@ -81,6 +82,7 @@ class FTPVistaPersist(object):
         self.servers = build_tables(self.meta)
         mapper(FTPServer, self.servers)
         
+        self.log = logging.getLogger('ftpvista.coordinator')
         self._scanner = nmap_scanner.FTPFilter()
         self.launch_online_checker()
 
