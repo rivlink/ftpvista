@@ -9,6 +9,9 @@ import pipeline
 from pipeline import Pipeline
 from timedcache import TimedCache
 import nmap_scanner
+from persist import FTPVistaPersist
+
+persist = FTPVistaPersist(settings.PERSIST_DB)
 
 
 class ARPSniffer (observer.Observable):
@@ -90,8 +93,11 @@ class FTPServerFilter (pipeline.Stage):
         self._scanner = nmap_scanner.FTPFilter()
 
     def execute(self, ip_addr):
-        return self._scanner.is_ftp_open(ip_addr)
-
+        if self._scanner.is_ftp_open(ip_addr):
+            server = persist.get_server_by_ip(ip_addr)
+            server.update_last_seen()
+            return True
+        return False
 
 def build_machine_filter_pipeline(blacklist, valid_addr_pattern,
                                   drop_duplicate_timeout):
