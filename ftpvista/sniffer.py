@@ -2,22 +2,27 @@
 
 import re
 
-import sys
-sys.path.append("/home/ftpvista/ftpvista3/ftpvista")
-from django.db import models
-from django.conf import settings
-
 from scapy.all import sniff, ARP
+
+import ConfigParser
 
 import observer
 import pipeline
 from pipeline import Pipeline
 from timedcache import TimedCache
 import nmap_scanner
-from persist import FTPVistaPersist
 
-persist = FTPVistaPersist(settings.PERSIST_DB)
+import persist as ftpvista_persist
 
+def init_persist():
+    config = ConfigParser.SafeConfigParser()
+    config.read(config_file)
+    db_uri = config.get('db', 'uri')
+    persist = ftpvista_persist.FTPVistaPersist(db_uri)
+    persist.initialize_store()
+    return persist
+
+persist = init_persist()
 
 class ARPSniffer (observer.Observable):
     """Finds the connected hosts by sniffing the ARP packets.
