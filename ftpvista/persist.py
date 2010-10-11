@@ -114,7 +114,7 @@ class FTPVistaPersist(object):
     def launch_online_checker(self):
         """Timer launched every 10 minutes to check if servers in database are online"""
         self.check()
-        Timer(60 * 10, self.check)
+        Timer(60 * 10, self.check).start()
     
     def check(self):
         servers = self.get_servers()
