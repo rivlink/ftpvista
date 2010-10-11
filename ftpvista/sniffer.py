@@ -8,7 +8,6 @@ import observer
 import pipeline
 from pipeline import Pipeline
 from timedcache import TimedCache
-from persist import FTPVista
 import nmap_scanner
 
 class ARPSniffer (observer.Observable):
@@ -90,11 +89,7 @@ class FTPServerFilter (pipeline.Stage):
         self._scanner = nmap_scanner.FTPFilter()
 
     def execute(self, ip_addr):
-        if self._scanner.is_ftp_open(ip_addr):
-            server = FTPVista.get_persist().get_server_by_ip(ip_addr)
-            server.update_last_seen()
-            return True
-        return False
+        return self._scanner.is_ftp_open(ip_addr)
 
 def build_machine_filter_pipeline(blacklist, valid_addr_pattern,
                                   drop_duplicate_timeout):

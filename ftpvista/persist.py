@@ -67,16 +67,6 @@ class FTPServer (object):
     def get_ip_with_name(self):
         return Servers.get_ip_with_name(self.ip)
 
-class FTPVista():
-    @staticmethod
-    def set_persist(persist):
-        print "Persist added"
-        FTPVista.persist = persist
-        
-    @staticmethod
-    def get_persist():
-        return FTPVista.persist
-
 class FTPVistaPersist(object):
     def __init__(self, db_uri):
         self.engine = create_engine(db_uri)

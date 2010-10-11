@@ -5,6 +5,7 @@ import os, os.path
 from datetime import datetime, timedelta
 from StringIO import StringIO
 from urllib import pathname2url
+from threading import Thread, Timer
 
 import pycurl
 import id3reader
@@ -18,6 +19,7 @@ import persist as ftpvista_persist
 import pipeline
 from scanner import FTPScanner
 from utils import to_unicode
+import nmap_scanner
 
 class Index (object):
     def __init__(self, dir):
@@ -272,7 +274,20 @@ def build_indexer_pipeline(server_id, server_addr, index):
 
     return pipe
 
-
+class OnlineUpdater(Thread):
+    """Check if the FTP is online every 10 minutes"""
+    def __init__ (self, server):
+        Thread.__init__(self)
+        self._server = server
+        self._scanner = nmap_scanner.FTPFilter()
+    
+    def run(self):
+        self.check()
+        Timer(60 * 10, self.check)
+    
+    def check(self):
+        if self._scanner.is_ftp_open(ip_addr):
+            self._server.update_last_seen()
 
 class IndexUpdateCoordinator(object):
     """Coordinate the scanning and indexing of FTP servers."""
@@ -290,6 +305,7 @@ class IndexUpdateCoordinator(object):
         self._persist = persist
         self._index = index
         self._update_interval = min_update_interval
+        self._online_updater = None
 
     def update_server(self, server_addr):
         """Update the server at the given address if an update is needed."""
@@ -297,8 +313,12 @@ class IndexUpdateCoordinator(object):
 
         if(datetime.now() - server.get_last_scanned()) >= self._update_interval:
             self._do_update(server)
-
-        server.update_last_seen()
+            
+        """This thread check if the FTP is online every 10 minutes"""
+        if self._online_updater is None:
+            self._online_updater = OnlineUpdater(server)
+            self._online_updater.start()
+        
         self._persist.save()
 
 
