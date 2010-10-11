@@ -70,6 +70,7 @@ class FTPServer (object):
 class FTPVista():
     @staticmethod
     def set_persist(persist):
+        print "Persist added"
         FTPVista.persist = persist
         
     @staticmethod
