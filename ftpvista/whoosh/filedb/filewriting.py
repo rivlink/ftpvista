@@ -20,10 +20,10 @@ from collections import defaultdict
 from whoosh.fields import UnknownFieldError
 from whoosh.filedb.fileindex import Segment
 from whoosh.filedb.filepostings import FilePostingWriter
-from whoosh.filedb.filetables import (StoredFieldWriter, CodedOrderedWriter,
-                                      CodedHashWriter)
-from whoosh.filedb import misc
+from whoosh.filedb.filetables import (TermIndexWriter, StoredFieldWriter,
+                                      TermVectorWriter)
 from whoosh.filedb.pools import TempfilePool
+from whoosh.reading import TermNotFound
 from whoosh.store import LockError
 from whoosh.support.filelock import try_for
 from whoosh.util import fib
@@ -112,9 +112,7 @@ class SegmentWriter(IndexWriter):
         
         # Terms index
         tf = self.storage.create_file(segment.termsindex_filename)
-        self.termsindex = CodedOrderedWriter(tf,
-                                             keycoder=misc.encode_termkey,
-                                             valuecoder=misc.encode_terminfo)
+        self.termsindex = TermIndexWriter(tf)
         
         # Term postings file
         pf = self.storage.create_file(segment.termposts_filename)
@@ -123,9 +121,7 @@ class SegmentWriter(IndexWriter):
         if self.schema.has_vectored_fields():
             # Vector index
             vf = self.storage.create_file(segment.vectorindex_filename)
-            self.vectorindex = CodedHashWriter(vf,
-                                               keycoder=misc.encode_vectorkey,
-                                               valuecoder=misc.encode_vectoroffset)
+            self.vectorindex = TermVectorWriter(vf)
             
             # Vector posting file
             vpf = self.storage.create_file(segment.vectorposts_filename)
@@ -136,7 +132,7 @@ class SegmentWriter(IndexWriter):
         
         # Stored fields file
         sf = self.storage.create_file(segment.storedfields_filename)
-        self.storedfields = StoredFieldWriter(sf)
+        self.storedfields = StoredFieldWriter(sf, self.schema.stored_names())
         
         # Field lengths file
         self.lengthfile = self.storage.create_file(segment.fieldlengths_filename)
@@ -332,7 +328,7 @@ class SegmentWriter(IndexWriter):
                     _unique_cache[name] = term2docnum
                     
                 # Look up the cached document number for this term
-                docnum = term2docnum[text]
+                delset.add(term2docnum[text])
             else:
                 # This is the first time we've seen an update_document with
                 # this field. Mark it by putting None in the cache for this
@@ -341,13 +337,13 @@ class SegmentWriter(IndexWriter):
                 # prevent caching a field even when the user is only going to
                 # call update_document once.
                 reader = self.searcher().reader()
-                docnum = reader.postings(name, text).id()
-                _unique_cache[name] = None
-                reader.close()
-            
-            # Add the document found for this field to the set of docs to
-            # delete
-            delset.add(docnum)
+                try:
+                    delset.add(reader.postings(name, text).id())
+                    _unique_cache[name] = None
+                except TermNotFound:
+                    pass
+                finally:
+                    reader.close()
             
         # Delete the old docs
         for docnum in delset:
