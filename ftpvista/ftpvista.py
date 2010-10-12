@@ -126,7 +126,9 @@ if __name__ == '__main__':
     if len(sys.argv) == 3:
         """ Execute nmap to check if servers are online """
         if sys.argv[1] == "online":
-            context = daemon.DaemonContext()
+            context = daemon.DaemonContext(
+                pidfile = lockfile.FileLock('/var/run/ftpvista_online_checker.pid')
+            )
             with context:
                 check_online(sys.argv[2])
     elif len(sys.argv) == 2:
