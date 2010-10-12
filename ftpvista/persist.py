@@ -119,7 +119,6 @@ class FTPVistaPersist(object):
             t.join()
     
     def check(self):
-        os.environ['TZ'] = 'CET'
         servers = self.get_servers()
         for server in servers:
             if self._scanner.is_ftp_open(server.get_ip_addr()):
