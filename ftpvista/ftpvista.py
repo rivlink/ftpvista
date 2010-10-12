@@ -36,7 +36,7 @@ def sniffer_task(queue, blacklist, valid_ip_pattern):
     # Run sniffer, run ..
     sniffer.run()
 
-def check_online():
+def check_online(config_file='ftpvista.conf'):
     config = ConfigParser.SafeConfigParser()
     config.read(config_file)
     logging.basicConfig(level=logging.DEBUG,
@@ -119,12 +119,12 @@ def main(config_file='ftpvista.conf'):
 
 if __name__ == '__main__':
     import sys
-
-    if len(sys.argv) == 2:
+    
+    if len(sys.argv) == 3:
         """ Execute nmap to check if servers are online """
         if sys.argv[1] == "online":
-            check_online()
-        else:
-            main(sys.argv[1])
+            check_online(sys.argv[2])
+    elif len(sys.argv) == 2:
+        main(sys.argv[1])
     else:
         main()
