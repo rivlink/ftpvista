@@ -36,6 +36,28 @@ def sniffer_task(queue, blacklist, valid_ip_pattern):
     # Run sniffer, run ..
     sniffer.run()
 
+def check_online():
+    config = ConfigParser.SafeConfigParser()
+    config.read(config_file)
+    logging.basicConfig(level=logging.DEBUG,
+                        format='%(asctime)s %(levelname)s:%(name)s:%(message)s',
+                        filename=config.get('logs', 'logfile'))
+    log = logging.getLogger('online_check')
+    log.info('Starting online servers checker')
+    
+    uid = config.getint('indexer', 'uid')
+    gid = config.getint('indexer', 'gid')
+    
+    log.info('Setting uid=%d and gid=%d' % (uid, gid))
+    os.setgid(gid)
+    os.setuid(uid)
+    
+    db_uri = config.get('db', 'uri')
+    persist = ftpvista_persist.FTPVistaPersist(db_uri)
+    persist.initialize_store()
+    
+    persist.launch_online_checker()
+
 def main(config_file='ftpvista.conf'):
     config = ConfigParser.SafeConfigParser()
     config.read(config_file)
@@ -76,7 +98,7 @@ def main(config_file='ftpvista.conf'):
 
     # Create the DB to store informations about the FTP servers
     db_uri = config.get('db', 'uri')
-    persist = ftpvista_persist.FTPVistaPersist(db_uri, True)
+    persist = ftpvista_persist.FTPVistaPersist(db_uri)
     persist.initialize_store()
 
     # Full-text index for storing terms from the files found on the servers
@@ -99,6 +121,10 @@ if __name__ == '__main__':
     import sys
 
     if len(sys.argv) == 2:
-        main(sys.argv[1])
+        """ Execute nmap to check if servers are online """
+        if sys.argv[1] == "online":
+            check_online()
+        else:
+            main(sys.argv[1])
     else:
         main()

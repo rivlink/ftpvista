@@ -72,7 +72,7 @@ class FTPServer (object):
     
 
 class FTPVistaPersist(object):
-    def __init__(self, db_uri, check_online=False):
+    def __init__(self, db_uri):
         self.engine = create_engine(db_uri)
         self.meta = MetaData(self.engine)
 
@@ -85,15 +85,9 @@ class FTPVistaPersist(object):
             mapper(FTPServer, self.servers)
         except ArgumentError:
             pass
-        
-        self.check_online = check_online
 
     def initialize_store(self):
         self.meta.create_all()
-        if self.check_online:
-            self.log = logging.getLogger('ftpvista.coordinator')
-            self._scanner = nmap_scanner.FTPFilter()
-            self.launch_online_checker()
 
     def get_server_by_ip(self, ip_addr):
         server = self.session.query(FTPServer).filter_by(ip=ip_addr).first()
@@ -113,6 +107,9 @@ class FTPVistaPersist(object):
         return self.session.query(FTPServer).all()
     
     def launch_online_checker(self):
+        self.log = logging.getLogger('online_check.nmaps')
+        self._scanner = nmap_scanner.FTPFilter()
+        self.launch_online_checker()
         """Timer launched every 5 minutes to check if servers in database are online"""
         self.check()
         Timer(60 * 5, self.check).start()
@@ -122,8 +119,9 @@ class FTPVistaPersist(object):
         for server in servers:
             if self._scanner.is_ftp_open(server.get_ip_addr()):
                 server.update_last_seen()
-                self.log.info('Server %s is online. Last seen value updated to now!' % server.get_ip_addr())
+                self.log.info('Server %s is online. Last seen value updated to now !' % server.get_ip_addr())
         self.save()
+        self.log.info('Online information saved !')
 
     def save(self):
         self.session.commit()

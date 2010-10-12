@@ -13,7 +13,7 @@ TEST_IP2 = '10.90.0.2'
 
 class TestFTPVistaPersist(unittest.TestCase):
     def setUp(self):
-        self.persist = persist.FTPVistaPersist(TEST_DB_URI, True)
+        self.persist = persist.FTPVistaPersist(TEST_DB_URI)
         self.persist.initialize_store()
 
         # insert one server
