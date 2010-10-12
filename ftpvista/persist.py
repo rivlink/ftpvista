@@ -22,9 +22,9 @@ def build_tables(meta):
         Column('id', Integer, primary_key=True),
         Column('ip', String(15), nullable=False, unique=True),
 
-        Column('first_seen', DATETIME, nullable=False, default=datetime.now),
-        Column('last_seen', DATETIME, nullable=False, default=datetime.now),
-        Column('last_scanned', DATETIME, nullable=False, default=never_date),
+        Column('first_seen', types.DateTime(timezone=True), nullable=False, default=datetime.now),
+        Column('last_seen', types.DateTime(timezone=True), nullable=False, default=datetime.now),
+        Column('last_scanned', types.DateTime(timezone=True), nullable=False, default=never_date),
 
         Column('nb_files', Integer, default=0),
         Column('files_size', Integer, default=0)

@@ -9,6 +9,8 @@ import socket
 import os
 import time
 
+os.environ['TZ'] = 'CET'
+
 from index import Index, IndexUpdateCoordinator
 import persist as ftpvista_persist
 import pipeline
