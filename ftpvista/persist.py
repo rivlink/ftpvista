@@ -3,7 +3,6 @@
 import logging
 from datetime import datetime, timedelta
 from threading import Timer
-import daemon
 
 import sqlalchemy
 from sqlalchemy import *
@@ -109,7 +108,6 @@ class FTPVistaPersist(object):
         return self.session.query(FTPServer).all()
     
     def launch_online_checker(self):
-        daemon.daemonize()
         self.log = logging.getLogger('online_check.nmaps')
         self._scanner = nmap_scanner.FTPFilter()
         """Timer launched every 5 minutes to check if servers in database are online"""

@@ -8,6 +8,7 @@ from multiprocessing import Process, Queue
 import socket
 import os
 import time
+import daemon
 
 os.environ['TZ'] = 'CET'
 
@@ -125,7 +126,9 @@ if __name__ == '__main__':
     if len(sys.argv) == 3:
         """ Execute nmap to check if servers are online """
         if sys.argv[1] == "online":
-            check_online(sys.argv[2])
+            context = daemon.DaemonContext()
+            with context:
+                check_online(sys.argv[2])
     elif len(sys.argv) == 2:
         main(sys.argv[1])
     else:
