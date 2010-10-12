@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime, timedelta
-from threading import Timer
+from threading import Condition
 import os
 
 import sqlalchemy
@@ -111,12 +111,11 @@ class FTPVistaPersist(object):
     def launch_online_checker(self):
         self.log = logging.getLogger('online_check.nmaps')
         self._scanner = nmap_scanner.FTPFilter()
-        self.check()
-        """Timer launched every 5 minutes to check if servers in database are online"""
+        condition = Condition()
+        """Check launched every 5 minutes to verify if servers in database are online"""
         while True:
-            t = Timer(60 * 5, self.check)
-            t.start()
-            t.join()
+            self.check()
+            condition.wait(60 * 5)
     
     def check(self):
         servers = self.get_servers()
