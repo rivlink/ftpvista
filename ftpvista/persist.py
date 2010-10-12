@@ -2,8 +2,7 @@
 
 import logging
 from datetime import datetime, timedelta
-from threading import Condition
-import os
+import time
 
 import sqlalchemy
 from sqlalchemy import *
@@ -115,7 +114,7 @@ class FTPVistaPersist(object):
         """Check launched every 5 minutes to verify if servers in database are online"""
         while True:
             self.check()
-            condition.wait(60 * 5)
+            time.sleep(60 * 5)
     
     def check(self):
         servers = self.get_servers()
