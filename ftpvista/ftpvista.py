@@ -9,6 +9,7 @@ import socket
 import os
 import time
 import daemon
+import lockfile
 
 os.environ['TZ'] = 'CET'
 
