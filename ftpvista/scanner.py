@@ -34,24 +34,26 @@ class FTPScanner(object):
 	
     def parse_permissions(self, permissions):
         """Determine whether permissions are interesting.
+        
+            - Updated 2010-10-13 - by Magne
+            Permissions of user "other" (3 first bits of permission) do not corresponds
+            to permissions of the anonymous user logged into the FTP.
+            To check if a directory is readable, we must try to open it (yeah it sucks !).
+            To check if a file is readable, we must try to download it (in order to avoid to long
+            scans, this check is not completed, and all files listed are supposed to be readable).
 
         If the permissions represent a directory, return (True,
-        enterable), where enterable is True if the directory can be
-        entered and listed.
+        enterable), where enterable is always True.
 
         If the permissions represent a file, return (False, readable),
-        where readable is True if the file can be read by the
-        anonymous user.
+        where readable is always True.
 
         If the permissions represent a symlink, return (False, False),
         indicating that it should be ignored.
         """
+        
         if permissions[0] == 'l':
             return False, False
-        elif permissions[0] == 'd':
-            interesting = (permissions[7] == 'r' and permissions[9] == 'x')
-        else:
-            interesting = (permissions[7] == 'r')
 
         return (permissions[0] == 'd'), True
 
