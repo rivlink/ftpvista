@@ -62,7 +62,7 @@ def search(query, limit=1000):
         
         bIsAudio = False
         for extra in['audio_performer', 'audio_title', 'audio_album', 'audio_year']:
-            if result.fileds().has_key(extra):
+            if result.fields().has_key(extra):
                 if result[extra] != None and result[extra] != "None": #FIXME: where does the None come from?
                     hit[extra] = result[extra]
                     bIsAudio = True
