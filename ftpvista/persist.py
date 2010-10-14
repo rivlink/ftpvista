@@ -105,22 +105,22 @@ class FTPVistaPersist(object):
     def get_servers(self):
         return self.session.query(FTPServer).all()
     
-    def launch_online_checker(self):
+    def launch_online_checker(self, interval=300):
+        """Launch a check every 'interval' (in seconds) to verify if servers in database are online"""
         self.log = logging.getLogger('online_check.nmaps')
         self._scanner = nmap_scanner.FTPFilter()
-        """Check launched every 5 minutes to verify if servers in database are online"""
+        
         while True:
             self.check()
-            time.sleep(60 * 5)
+            time.sleep(int(interval))
     
     def check(self):
         servers = self.get_servers()
         for server in servers:
             if self._scanner.is_ftp_open(server.get_ip_addr()):
-                server.update_last_seen()
-                self.log.info('Server %s is online. Last seen value updated to now !' % server.get_ip_addr())
+                server.update_last_seen(datetime.now())
+                self.log.info('Server %s is online. Last seen value was %s' % (server.get_ip_addr(), server.last_seen))
         self.save()
-        self.session.close()
         self.log.info('Online information saved !')
 
     def save(self):
