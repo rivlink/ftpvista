@@ -37,10 +37,17 @@ class FTPServer (object):
     def __init__(self, ip_addr):
         self.ip = ip_addr
 
-    def update_last_seen(self, time=datetime.now()):
+    def update_last_seen(self, time=None):
+        """As default value is evaluated only once, and is shared between calls,
+        the 'time' variable must be instanciated each time the method is called"""
+        if time == None:
+            time = datetime.now()
         self.last_seen = time
 
-    def update_last_scanned(self, time=datetime.now()):
+    def update_last_scanned(self, time=None):
+        """Same as 'update_last_seen' method"""
+        if time == None:
+            time = datetime.now()
         self.last_scanned = time
 
     def get_server_id(self):
@@ -118,7 +125,7 @@ class FTPVistaPersist(object):
         servers = self.get_servers()
         for server in servers:
             if self._scanner.is_ftp_open(server.get_ip_addr()):
-                server.update_last_seen(datetime.now())
+                server.update_last_seen()
                 self.log.info('Server %s is online. Last seen value was %s' % (server.get_ip_addr(), server.last_seen))
         self.save()
         self.log.info('Online information saved !')
