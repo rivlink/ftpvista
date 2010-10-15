@@ -112,7 +112,7 @@
 						<ul class="server_list">
 							{% for server in servers %}
 								{% autoescape off %}
-								<li><a href="ftp://{{ server.get_ip_addr }}">{{ server.get_ip_with_name }}</a></li>
+								<li class="{{ server.get_online_class }}"><span><a href="ftp://{{ server.get_ip_addr }}">{{ server.get_ip_with_name }}</a></span></li>
 								{% endautoescape %}
 							{% endfor %}
 						</ul>

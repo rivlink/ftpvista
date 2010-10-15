@@ -76,6 +76,14 @@ class FTPServer (object):
     
     def get_ip_with_name(self):
         return Servers.get_ip_with_name(self.ip)
+    
+    def is_online(self):
+        return (self.last_seen + timedelta(minutes=10)) >= datetime.now()
+    
+    def get_online_class(self):
+        if self.is_online():
+            return "online"
+        return "offline"
 
 class FTPVistaPersist(object):
     def __init__(self, db_uri):
