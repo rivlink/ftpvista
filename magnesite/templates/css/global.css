@@ -41,11 +41,11 @@ a:hover{
 }
 
 .server_list li.online{
-	color: green;
+	color: #00C90D;
 }
 
 .server_list li.offline{
-	color: red;
+	color: #FD0000;
 }
 
 .server_list li span{
