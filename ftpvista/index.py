@@ -13,7 +13,6 @@ from whoosh import index
 from whoosh.fields import Schema, ID, IDLIST, KEYWORD, TEXT
 from whoosh.analysis import StandardAnalyzer
 from whoosh.query import Term
-from whoosh.writing import BatchWriter
 
 import persist as ftpvista_persist
 import pipeline
@@ -34,7 +33,7 @@ class Index (object):
             self._idx = index.open_dir(dir)
 
         self._searcher = self._idx.searcher()
-        self._writer = BatchWriter(self._idx, 2)
+        self._writer = self._idx.writer()
 
     def get_schema(self):
         return Schema(server_id=ID(stored=True),
