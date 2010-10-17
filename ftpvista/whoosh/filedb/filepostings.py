@@ -336,7 +336,7 @@ class FilePostingReader(Matcher):
         for _ in xrange(self.blockcount):
             blockinfo = self._read_blockinfo(nextoffset)
             nextoffset = blockinfo.nextoffset
-            ids, __ = self._read_ids(blockinfo.dataoffset, blockinfo.postcount)
+            ids, __ = self._read_ids(blockinfo.dataoffset, blockinfo.postcount, blockinfo.idslen)
             for id in ids:
                 yield id
 
@@ -376,10 +376,9 @@ class FilePostingReader(Matcher):
         pf.seek(offset)
         return BlockInfo.from_file(pf, self.stringids)
         
-    def _read_ids(self, offset, postcount):
+    def _read_ids(self, offset, postcount, idslen):
         pf = self.postfile
         pf.seek(offset)
-        idslen = self.blockinfo.idslen
         
         if self.stringids:
             rs = pf.read_string
@@ -449,7 +448,7 @@ class FilePostingReader(Matcher):
 
     def _consume_block(self):
         postcount = self.blockinfo.postcount
-        self.ids, woffset = self._read_ids(self.blockinfo.dataoffset, postcount)
+        self.ids, woffset = self._read_ids(self.blockinfo.dataoffset, postcount, self.blockinfo.idslen)
         self.weights, voffset = self._read_weights(woffset, postcount)
         self.voffset = voffset
         self.values = None
