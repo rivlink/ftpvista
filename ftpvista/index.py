@@ -135,6 +135,7 @@ class Index (object):
         self.log.info(' -- Begin of Commit -- ')
         self._writer.commit()
         self.log.info('Writer commited')
+        self._idx = self._idx.refresh();
         self._idx.optimize()
         self.log.info('Index optimized')
         
