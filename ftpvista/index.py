@@ -134,8 +134,9 @@ class Index (object):
     def commit(self):
         """ Commit the changes in the index and optimize it """
         self.log.info(' -- Begin of Commit -- ')
-        self._writer.commit(optimize=True)
-        self.log.info('Index optimized')
+        self._writer.commit()
+        self._idx.optimize()
+        self.log.info('Index commited and optimized')
         
         self._searcher = self._idx.searcher()
         self.log.info(' -- End of Commit -- ')
