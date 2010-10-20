@@ -179,6 +179,7 @@ class StructFile(object):
     def read_pickle(self):
         """Reads a pickled object from the wrapped file.
         """
+        self.file.seek(0)
         return load_pickle(self.file)
 
     def write_sbyte(self, n):
