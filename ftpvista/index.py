@@ -34,7 +34,7 @@ class Index (object):
             self._idx = index.open_dir(dir)
 
         self._searcher = self._idx.searcher()
-        self._writer = BatchWriter(self._idx, 10, 100)
+        self._writer = BatchWriter(self._idx, 2)
 
     def get_schema(self):
         return Schema(server_id=ID(stored=True),
@@ -64,8 +64,10 @@ class Index (object):
         """
 
         def delete_doc(serverid, path):
-            docnum = self._searcher.document_number(server_id=serverid, path=path)
-            self._writer.delete_document(docnum)
+            writer = self._idx.writer()
+            writer.delete_by_query(Term('server_id', serverid) &
+                                      Term('path', path))
+            writer.commit()
 
 
         # Build a {path => (size, mtime)} mapping for quick lookups
@@ -132,9 +134,8 @@ class Index (object):
     def commit(self):
         """ Commit the changes in the index and optimize it """
         self.log.info(' -- Begin of Commit -- ')
-        self._writer.commit()
-        self._idx.optimize()
-        self.log.info('Index commited and optimized')
+        self._writer.commit(optimize=True)
+        self.log.info('Index optimized')
         
         self._searcher = self._idx.searcher()
         self.log.info(' -- End of Commit -- ')
