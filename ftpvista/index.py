@@ -34,7 +34,7 @@ class Index (object):
             self._idx = index.open_dir(dir)
 
         self._searcher = self._idx.searcher()
-        self._writer = BatchWriter(self._idx, 2)
+        self._writer = self._idx.writer()
 
     def get_schema(self):
         return Schema(server_id=ID(stored=True),
@@ -132,7 +132,7 @@ class Index (object):
 
 
     def commit(self):
-        self._writer = BatchWriter(self._idx, 2)
+        self._writer = self._idx.writer()
         """ Commit the changes in the index and optimize it """
         self.log.info(' -- Begin of Commit -- ')
         self._writer.commit()
@@ -347,26 +347,3 @@ class IndexUpdateCoordinator(object):
         self._index.commit()
 
         self.log.info('Server %d (%s) updated' % (server_id, server_addr))
-
-
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG, filename='/home/fred/narf/logs')
-    
-    persist = ftpvista_persist.FTPVistaPersist('sqlite:///test.db?check_same_thread=False')
-    persist.initialize_store()
-    
-    index = Index('/dev/shm/idx/')
-
-       
-    coordinator = IndexUpdateCoordinator(persist, index, timedelta(days=1))
-    coordinator.update_server("10.8.39.2")
-    coordinator.update_server("10.8.36.2")
-    coordinator.update_server("10.83.57.4")
-    coordinator.update_server("10.83.75.1")
-    coordinator.update_server("10.83.78.1")
-    #coordinator.start()
-
-    #index.close()
-    
-
-    
