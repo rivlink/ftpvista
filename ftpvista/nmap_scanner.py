@@ -12,7 +12,9 @@ SUDO = '/usr/bin/sudo'
 NMAP = '/usr/bin/nmap'
 
 UP_FTP_RE = re.compile(r'^Host: (\d+.\d+.\d+.\d+)\W+Ports: 21/open')
-
+"""In order to use sudo for ftpvista, this line must be added to /etc/sudoers file :
+ftpvista ALL=NOPASSWD: /usr/bin/nmap
+"""
 class FTPFilter(object):
     def __init__(self, use_sudo=False, nmap_binary=NMAP,
                  sudo_binary=SUDO) :
