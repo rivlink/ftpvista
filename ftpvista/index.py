@@ -64,10 +64,8 @@ class Index (object):
         """
 
         def delete_doc(serverid, path):
-            writer = self._idx.writer()
-            writer.delete_by_query(Term('server_id', serverid) &
+            self._writer.delete_by_query(Term('server_id', serverid) &
                                       Term('path', path))
-            writer.commit()
 
 
         # Build a {path => (size, mtime)} mapping for quick lookups
@@ -132,7 +130,7 @@ class Index (object):
 
 
     def commit(self):
-        self._writer = AsyncWriter(self._idx)
+        #self._writer = self._idx.writer()
         """ Commit the changes in the index and optimize it """
         self.log.info(' -- Begin of Commit -- ')
         self._writer.commit()
