@@ -5,7 +5,7 @@ import os, os.path
 from datetime import datetime, timedelta
 from StringIO import StringIO
 from urllib import pathname2url
-from threading import Thread, Timer 
+from threading import Thread, Timer
 
 import pycurl
 import id3reader
@@ -13,7 +13,7 @@ from whoosh import index
 from whoosh.fields import Schema, ID, IDLIST, KEYWORD, TEXT
 from whoosh.analysis import StandardAnalyzer
 from whoosh.query import Term
-from whoosh.writing import AsyncWriter
+from whoosh.writing import BatchWriter
 
 import persist as ftpvista_persist
 import pipeline
@@ -34,7 +34,7 @@ class Index (object):
             self._idx = index.open_dir(dir)
 
         self._searcher = self._idx.searcher()
-        self._writer = AsyncWriter(self._idx)
+        self._writer = BatchWriter(self._idx, 30, 1000)
 
     def get_schema(self):
         return Schema(server_id=ID(stored=True),
@@ -64,8 +64,10 @@ class Index (object):
         """
 
         def delete_doc(serverid, path):
-            self._writer.delete_by_query(Term('server_id', serverid) &
+            writer = self._idx.writer()
+            writer.delete_by_query(Term('server_id', serverid) &
                                       Term('path', path))
+            writer.commit()
 
 
         # Build a {path => (size, mtime)} mapping for quick lookups
@@ -130,7 +132,7 @@ class Index (object):
 
 
     def commit(self):
-        #self._writer = self._idx.writer()
+        self._writer = self._idx.writer()
         """ Commit the changes in the index and optimize it """
         self.log.info(' -- Begin of Commit -- ')
         self._writer.commit()
