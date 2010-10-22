@@ -132,7 +132,7 @@ class Index (object):
 
 
     def commit(self):
-        self._writer = self._idx.writer()
+        self._writer = BatchWriter(self._idx, 30, 1000)
         """ Commit the changes in the index and optimize it """
         self.log.info(' -- Begin of Commit -- ')
         self._writer.commit()
