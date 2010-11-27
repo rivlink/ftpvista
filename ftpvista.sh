@@ -10,6 +10,7 @@
 
 DAEMON=/home/ftpvista/ftpvista3/ftpvista/ftpvista.py
 PID=/var/run/ftpvista.pid
+PID2=/var/run/ftpvista_online_checker.pid
 DESC=FTPVista
 
 test -x $DAEMON || exit 0
@@ -17,9 +18,16 @@ test -x $DAEMON || exit 0
 set -e
 
 case "$1" in
+  start-online-checker)
+    echo -n "Starting $DESC Online Checker: "
+    start-stop-daemon --start --quiet --exec $DAEMON --pidfile $PID2 -- -o
+    ;;
+  stop-online-checker)
+    start-stop-daemon --stop --quiet --pidfile $PID2
+    ;;
   start)
     echo -n "Starting $DESC: "
-    start-stop-daemon --start --quiet --exec $DAEMON
+    start-stop-daemon --start --quiet --exec $DAEMON --pidfile $PID
     ;;
   stop)
     echo -n "Stopping $DESC: "
