@@ -25,6 +25,11 @@ case "$1" in
   stop-online-checker)
     start-stop-daemon --stop --quiet --pidfile $PID2
     ;;
+  restart-online-checker)
+    echo -n "Restarting $DESC: "
+    start-stop-daemon --stop --quiet --pidfile $PID2
+    start-stop-daemon --start --quiet --exec $DAEMON --pidfile $PID2 -- -o
+    ;;
   start)
     echo -n "Starting $DESC: "
     start-stop-daemon --start --quiet --exec $DAEMON --pidfile $PID
@@ -33,10 +38,10 @@ case "$1" in
     echo -n "Stopping $DESC: "
     start-stop-daemon --stop --quiet --pidfile $PID
     ;;
-  restart|force-reload)
+  restart)
     echo -n "Restarting $DESC: "
     start-stop-daemon --stop --quiet --pidfile $PID
-    start-stop-daemon --start --quiet --exec $DAEMON
+    start-stop-daemon --start --quiet --exec $DAEMON --pidfile $PID
     ;;
   status)
       if pidofproc -p "$PIDFILE" >/dev/null; then
@@ -54,7 +59,7 @@ case "$1" in
       ;;
   *)
     N=/etc/init.d/$NAME
-    echo "Usage: $N {start|stop|restart|reload|force-reload|status}" >&2
+    echo "Usage: $N {start|stop|restart|start-online-checker|stop-online-checker|restart-online-checker|status}" >&2
     exit 1
     ;;
 esac
