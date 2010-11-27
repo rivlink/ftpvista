@@ -11,7 +11,6 @@ from datetime import datetime
 
 from utils import to_unicode
 
-
 class FTPScanner(object):
     def __init__(self, host, ftp_class=ftplib.FTP):
         self.host = host

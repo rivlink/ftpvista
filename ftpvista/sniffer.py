@@ -9,6 +9,7 @@ import pipeline
 from pipeline import Pipeline
 from timedcache import TimedCache
 import nmap_scanner
+import multiprocessing
 
 class ARPSniffer (observer.Observable):
     """Finds the connected hosts by sniffing the ARP packets.
@@ -23,7 +24,7 @@ class ARPSniffer (observer.Observable):
     def run(self):
         """Run the sniffer"""
         sniff(filter="arp", prn=self._arp_callback, store=0)
-
+    
     def _arp_callback(self, pkt):
         if ARP in pkt:
             self.notify_observers(pkt[ARP].psrc)

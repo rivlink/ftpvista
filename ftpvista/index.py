@@ -5,7 +5,6 @@ import os, os.path
 from datetime import datetime, timedelta
 from StringIO import StringIO
 from urllib import pathname2url
-from threading import Thread, Timer
 
 import pycurl
 import id3reader

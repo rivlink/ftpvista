@@ -9,4 +9,4 @@ if [[ -e whoosh ]]; then
   exit 42
 fi
 
-svn co http://svn.whoosh.ca/projects/whoosh/trunk/src/whoosh/ whoosh
+hg clone http://bitbucket.org/mchaput/whoosh whoosh
