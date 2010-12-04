@@ -13,6 +13,8 @@ from whoosh.fields import Schema, ID, IDLIST, KEYWORD, TEXT
 from whoosh.analysis import StandardAnalyzer
 from whoosh.query import Term
 from whoosh.writing import BatchWriter
+from whoosh.analysis import CharsetFilter, StemmingAnalyzer
+from whoosh.support.charset import default_charset, charset_table_to_dict
 
 import persist as ftpvista_persist
 import pipeline
@@ -36,16 +38,18 @@ class Index (object):
         self._writer = BatchWriter(self._idx, 30, 1000)
 
     def get_schema(self):
+        charmap = charset_table_to_dict(default_charset)
+        my_analyzer = StemmingAnalyzer | CharsetFilter(charmap)
         return Schema(server_id=ID(stored=True),
-                      path=TEXT(analyzer=StandardAnalyzer(r'\w+'), stored=True),
-                      name=TEXT(analyzer=StandardAnalyzer(r'\w+'), stored=True),
+                      path=TEXT(analyzer=my_analyzer, stored=True),
+                      name=TEXT(analyzer=my_analyzer, stored=True),
                       size=ID(stored=True),
                       mtime=ID(stored=True),
-                      audio_album=TEXT(analyzer=StandardAnalyzer(r'\w+'),
+                      audio_album=TEXT(analyzer=my_analyzer,
                                        stored=True),
-                      audio_performer=TEXT(analyzer=StandardAnalyzer(r'\w+'),
+                      audio_performer=TEXT(analyzer=my_analyzer,
                                            stored=True),
-                      audio_title=TEXT(analyzer=StandardAnalyzer(r'\w+'),
+                      audio_title=TEXT(analyzer=my_analyzer,
                                        stored=True),
                       audio_track=ID(stored=True),
                       audio_year=ID(stored=True)
