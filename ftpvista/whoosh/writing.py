@@ -98,8 +98,9 @@ class IndexWriter(object):
         
         count = 0
         for docnum in q.docs(s):
-            self.delete_document(docnum)
-            count += 1
+            if not self.is_deleted(docnum):
+                self.delete_document(docnum)
+                count += 1
         
         if not searcher:
             s.close()
@@ -157,7 +158,8 @@ class IndexWriter(object):
         delset = set()
         reader = self.searcher().reader()
         for name in unique_fields:
-            text = fields[name]
+            field = self.schema[name]
+            text = field.to_text(fields[name])
             docnum = reader.postings(name, text).id()
             delset.add(docnum)
         reader.close()
@@ -276,7 +278,7 @@ class AsyncWriter(threading.Thread, IndexWriter):
         writer.commit(*self.commitargs, **self.commitkwargs)
     
     def delete_document(self, docnum):
-        self._record("delete_document", docnum)
+        self._record("delete_document", docnum, {})
     
     def add_document(self, *args, **kwargs):
         self._record("add_document", args, kwargs)
@@ -306,7 +308,14 @@ class BatchWriter(object):
     """Convenience wrapper that batches up calls to ``add_document()``,
     ``update_document()``, and/or ``delete_document()``, and commits them
     whenever a maximum amount of time passes or a maximum number of batched
-    changes accumulates.
+    changes accumulate.
+    
+    This is useful when you're adding documents one at a time, in rapid
+    succession (e.g. a web app). The more documents you add per commit, the
+    more efficient Whoosh is. This class batches multiple documents and adds
+    them all at once. If you're adding a bunch of documents at a time, just use
+    a regular writer -- you're already committing a "batch" of documents, so
+    you don't need this class.
     
     In scenarios where you are continuously adding single documents very
     rapidly (for example a web application where lots of users are adding

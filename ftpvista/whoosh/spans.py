@@ -34,7 +34,7 @@ For example, to find documents containing "whoosh" at most 5 positions before
 
 
 from whoosh.matching import (WrappingMatcher, AndMaybeMatcher, UnionMatcher,
-                             IntersectionMatcher)
+                             IntersectionMatcher, NullMatcher)
 from whoosh.query import And, AndMaybe, Or, Query, Term
 from whoosh.util import make_binary_tree
 
@@ -158,11 +158,17 @@ class SpanWrappingMatcher(WrappingMatcher):
             self._find_next()
     
     def copy(self):
-        m = self.__class__(self.child.copy(), self.fn)
+        m = self.__class__(self.child.copy())
         m._spans = self._spans
         return m
     
+    def _replacement(self, newchild):
+        return self.__class__(newchild)
+    
     def _find_next(self):
+        if not self.is_active():
+            return
+        
         child = self.child
         r = False
         
@@ -242,6 +248,12 @@ class SpanFirst(SpanQuery):
             self.limit = limit
             super(SpanFirst.SpanFirstMatcher, self).__init__(child)
         
+        def copy(self):
+            return self.__class__(self.child.copy(), limit=self.limit)
+        
+        def _replacement(self, newchild):
+            return self.__class__(newchild, limit=self.limit)
+        
         def _get_spans(self):
             return [span for span in self.child.spans()
                     if span.end <= self.limit]
@@ -273,7 +285,7 @@ class SpanNear(SpanQuery):
     You can use the ``phrase()`` class method to create a tree of SpanNear
     queries to match a list of terms::
     
-        q = spans.SpanNear.phrase("text", ["whoosh", "search", "library"], slop=2)
+        q = spans.SpanNear.phrase("text", [u"whoosh", u"search", u"library"], slop=2)
     """
     
     def __init__(self, a, b, slop=1, ordered=True, mindist=1):
@@ -312,8 +324,14 @@ class SpanNear(SpanQuery):
     def phrase(cls, fieldname, words, slop=1, ordered=True):
         """Returns a tree of SpanNear queries to match a list of terms.
         
+        This class method is a convenience for constructing a phrase query
+        using a binary tree of SpanNear queries.
+        
+        >>> SpanNear.phrase("f", [u"a", u"b", u"c", u"d"])
+        SpanNear(SpanNear(Term("f", u"a"), Term("f", u"b")), SpanNear(Term("f", u"c"), Term("f", u"d")))
+        
         :param fieldname: the name of the field to search in.
-        :param words: a sequence of tokens to search for.
+        :param words: a sequence of token texts to search for.
         :param slop: the number of positions within which the terms must
             occur. Default is 1, meaning the terms must occur right next
             to each other.
@@ -332,6 +350,15 @@ class SpanNear(SpanQuery):
             self.mindist = mindist
             isect = IntersectionMatcher(a, b)
             super(SpanNear.SpanNearMatcher, self).__init__(isect)
+        
+        def copy(self):
+            return self.__class__(self.a.copy(), self.b.copy(), slop=self.slop,
+                                  ordered=self.ordered, mindist=self.mindist)
+        
+        def replace(self):
+            if not self.is_active():
+                return NullMatcher()
+            return self
         
         def _get_spans(self):
             slop = self.slop
@@ -359,7 +386,17 @@ class SpanNear(SpanQuery):
                         spans.add(aspan.to(bspan))
             
             return sorted(spans)
+
+
+class SpanBiMatcher(SpanWrappingMatcher):
+    def copy(self):
+        return self.__class__(self.a.copy(), self.b.copy())
     
+    def replace(self):
+        if not self.is_active():
+            return NullMatcher()
+        return self
+
 
 class SpanNot(SpanQuery):
     """Matches spans from the first query only if they don't overlap with
@@ -392,7 +429,7 @@ class SpanNot(SpanQuery):
         mb = self.b.matcher(searcher, exclude_docs=exclude_docs)
         return SpanNot.SpanNotMatcher(ma, mb)
     
-    class SpanNotMatcher(SpanWrappingMatcher):
+    class SpanNotMatcher(SpanBiMatcher):
         def __init__(self, a, b):
             self.a = a
             self.b = b
@@ -434,7 +471,7 @@ class SpanOr(SpanQuery):
                     for q in self.subqs]
         return make_binary_tree(SpanOr.SpanOrMatcher, matchers)
     
-    class SpanOrMatcher(SpanWrappingMatcher):
+    class SpanOrMatcher(SpanBiMatcher):
         def __init__(self, a, b):
             self.a = a
             self.b = b
@@ -482,7 +519,7 @@ class SpanContains(SpanQuery):
         mb = self.b.matcher(searcher, exclude_docs=exclude_docs)
         return SpanContains.SpanContainsMatcher(ma, mb)
     
-    class SpanContainsMatcher(SpanWrappingMatcher):
+    class SpanContainsMatcher(SpanBiMatcher):
         def __init__(self, a, b):
             self.a = a
             self.b = b
@@ -533,7 +570,7 @@ class SpanBefore(SpanQuery):
         mb = self.b.matcher(searcher, exclude_docs=exclude_docs)
         return SpanBefore.SpanBeforeMatcher(ma, mb)
         
-    class SpanBeforeMatcher(SpanWrappingMatcher):
+    class SpanBeforeMatcher(SpanBiMatcher):
         def __init__(self, a, b):
             self.a = a
             self.b = b
@@ -543,6 +580,40 @@ class SpanBefore(SpanQuery):
         def _get_spans(self):
             bminstart = min(bspan.start for bspan in self.b.spans())
             return [aspan for aspan in self.a.spans() if aspan.end < bminstart]
+
+
+class SpanCondition(SpanQuery):
+    """Matches documents that satisfy both subqueries, but only uses the spans
+    from the first subquery.
+    
+    This is useful when you want to place conditions on matches but not have
+    those conditions affect the spans returned.
+    
+    For example, to get spans for the term ``alfa`` in documents that also
+    must contain the term ``bravo``::
+    
+        SpanCondition(Term("text", u"alfa"), Term("text", u"bravo"))
+    
+    """
+    
+    def __init__(self, a, b):
+        self.a = a
+        self.b = b
+        self.q = And([a, b])
+        
+    def matcher(self, searcher, exclude_docs=None):
+        ma = self.a.matcher(searcher, exclude_docs=exclude_docs)
+        mb = self.b.matcher(searcher, exclude_docs=exclude_docs)
+        return SpanCondition.SpanConditionMatcher(ma, mb)
+    
+    class SpanConditionMatcher(SpanBiMatcher):
+        def __init__(self, a, b):
+            self.a = a
+            isect = IntersectionMatcher(a, b)
+            super(SpanCondition.SpanConditionMatcher, self).__init__(isect)
+
+        def _get_spans(self):
+            return self.a.spans()
 
 
 

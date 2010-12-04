@@ -24,6 +24,13 @@ import re
 from whoosh import query
 
 
+class QueryParserError(Exception):
+    def __init__(self, cause, msg=None):
+        super(QueryParserError, self).__init__(str(cause))
+        self.cause = cause
+
+
+
 ws = "[ \t\r\n]+"
 wsexpr = re.compile(ws)
 
@@ -180,6 +187,7 @@ class Token(SyntaxObject):
     """
     
     fieldname = None
+    endpos = None
     
     def set_boost(self, b):
         return self
@@ -194,6 +202,9 @@ class Token(SyntaxObject):
     @classmethod
     def create(cls, parser, match):
         return cls()
+    
+    def query(self, parser):
+        raise NotImplementedError
 
 
 class Singleton(Token):
@@ -217,6 +228,32 @@ class Singleton(Token):
 class White(Singleton):
     expr = re.compile("[ \t\r\n]+")
     
+
+class ErrorToken(Token):
+    """A token representing an unavoidable parsing error. The ``query()``
+    method always returns NullQuery.
+    
+    The default parser usually does not produce "errors" (text that doesn't
+    match the syntax is simply treated as part of the query), so this is mostly
+    for use by plugins that may add more restrictive parsing, for example
+    :class:`DateParserPlugin`.
+    
+    Since the corresponding NullQuery will be filtered out when the query is
+    normalized, this is really only useful for debugging and possibly for
+    plugin filters.
+    
+    The ``token`` attribute may contain the token that produced the error.
+    """
+    
+    def __init__(self, token):
+        self.token = token
+        
+    def __repr__(self):
+        return "<%s (%r)>" % (self.__class__.__name__, self.token)
+    
+    def query(self, parser):
+        return query.NullQuery
+
 
 class BasicSyntax(Token):
     """Base class for "basic" (atomic) syntax -- term, prefix, wildcard,
@@ -257,12 +294,16 @@ class BasicSyntax(Token):
         fieldname = self.fieldname or parser.fieldname
         if parser.schema and fieldname in parser.schema:
             field = parser.schema[fieldname]
+            
             if field.self_parsing():
-                return field.parse_query(fieldname, self.text, boost=self.boost)
-            else:
-                text = parser.get_single_text(field, text,
-                                              tokenize=self.tokenize,
-                                              removestops=self.removestops)
+                try:
+                    return field.parse_query(fieldname, self.text, boost=self.boost)
+                except QueryParserError, e:
+                    return query.NullQuery
+            
+            text = parser.get_single_text(field, text,
+                                          tokenize=self.tokenize,
+                                          removestops=self.removestops)
         
         if text is not None:
             cls = self.qclass or parser.termclass
@@ -289,10 +330,18 @@ class Plugin(object):
     """Base class for parser plugins.
     """
             
-    def tokens(self):
+    def tokens(self, parser):
+        """Returns a list of ``(token_class, priority)`` tuples to add to the
+        syntax the parser understands.
+        """
+        
         return ()
     
-    def filters(self):
+    def filters(self, parser):
+        """Returns a list of ``(filter_function, priority)`` tuples to add to
+        parser.
+        """
+        
         return ()
     
 
@@ -302,8 +351,8 @@ class RangePlugin(Plugin):
     This plugin is included in the default parser configuration.
     """
     
-    def tokens(self):
-        return ((RangePlugin.Range, 0), )
+    def tokens(self, parser):
+        return ((RangePlugin.Range, 1), )
     
     class Range(Token):
         expr = re.compile(r"""
@@ -367,6 +416,17 @@ class RangePlugin(Plugin):
             start, end = self.start, self.end
             if parser.schema and fieldname in parser.schema:
                 field = parser.schema[fieldname]
+                
+                if field.self_parsing():
+                    try:
+                        rangeq = field.parse_range(fieldname, start, end,
+                                                   self.startexcl, self.endexcl,
+                                                   boost=self.boost)
+                        if rangeq is not None:
+                            return rangeq
+                    except QueryParserError, e:
+                        return query.NullQuery
+                    
                 if start:
                     start = parser.get_single_text(field, start,
                                                    tokenize=False,
@@ -382,7 +442,7 @@ class RangePlugin(Plugin):
             
             return query.TermRange(fieldname, start, end, self.startexcl,
                                    self.endexcl, boost=self.boost)
-
+            
 
 class PhrasePlugin(Plugin):
     """Adds the ability to specify phrase queries inside double quotes.
@@ -390,7 +450,7 @@ class PhrasePlugin(Plugin):
     This plugin is included in the default parser configuration.
     """
     
-    def tokens(self):
+    def tokens(self, parser):
         return ((PhrasePlugin.Quotes, 0), )
     
     class Quotes(BasicSyntax):
@@ -439,11 +499,11 @@ class SingleQuotesPlugin(Plugin):
     This plugin is included in the default parser configuration.
     """
      
-    def tokens(self):
+    def tokens(self, parser):
         return ((SingleQuotesPlugin.SingleQuotes, 0), )
     
     class SingleQuotes(Token):
-        expr = re.compile("'([^']*?)('|$)")
+        expr = re.compile(r"'([^']*?)'(?=\s|\]|[)}]|$)")
         
         @classmethod
         def create(cls, parser, match):
@@ -457,7 +517,7 @@ class PrefixPlugin(Plugin):
     including the wildcard plugin, you should not include this plugin as well.
     """
     
-    def tokens(self):
+    def tokens(self, parser):
         return ((PrefixPlugin.Prefix, 0), )
     
     class Prefix(BasicSyntax):
@@ -484,8 +544,8 @@ class WildcardPlugin(Plugin):
     This plugin is included in the default parser configuration.
     """
     
-    def tokens(self):
-        return ((WildcardPlugin.Wild, 0), )
+    def tokens(self, parser):
+        return ((WildcardPlugin.Wild, 1), )
     
     class Wild(BasicSyntax):
         expr = re.compile("[^ \t\r\n*?]*(\\*|\\?)\\S*")
@@ -509,7 +569,7 @@ class WordPlugin(Plugin):
     This plugin is always automatically included by the QueryParser.
     """
     
-    def tokens(self):
+    def tokens(self, parser):
         return ((Word, 900), )
 
 
@@ -520,10 +580,10 @@ class WhitespacePlugin(Plugin):
     This plugin is always automatically included by the QueryParser.
     """
     
-    def tokens(self):
+    def tokens(self, parser):
         return ((White, 100), )
     
-    def filters(self):
+    def filters(self, parser):
         return ((WhitespacePlugin.do_whitespace, 500), )
     
     @staticmethod
@@ -543,10 +603,10 @@ class GroupPlugin(Plugin):
     This plugin is included in the default parser configuration.
     """
     
-    def tokens(self):
+    def tokens(self, parser):
         return ((GroupPlugin.Open, 0), (GroupPlugin.Close, 0))
     
-    def filters(self):
+    def filters(self, parser):
         return ((GroupPlugin.do_groups, 0), )
     
     @staticmethod
@@ -585,10 +645,10 @@ class FieldsPlugin(Plugin):
     This plugin is included in the default parser configuration.
     """
     
-    def tokens(self):
+    def tokens(self, parser):
         return ((FieldsPlugin.Field, 0), )
     
-    def filters(self):
+    def filters(self, parser):
         return ((FieldsPlugin.do_fieldnames, 100), )
 
     @staticmethod
@@ -609,13 +669,16 @@ class FieldsPlugin(Plugin):
             
             if isinstance(t, Group):
                 t = FieldsPlugin.do_fieldnames(parser, t)
-            newstream.append(t.set_fieldname(newname))
+                
+            if newname is not None:
+                t = t.set_fieldname(newname)
+            newstream.append(t)
             newname = None
         
         return newstream
     
     class Field(Token):
-        expr = re.compile("([A-Za-z_][A-Za-z_0-9]*):")
+        expr = re.compile("([A-Za-z][A-Za-z_0-9]*):(?!=(\\s|$))")
         
         def __init__(self, fieldname):
             self.fieldname = fieldname
@@ -628,7 +691,9 @@ class FieldsPlugin(Plugin):
         
         @classmethod
         def create(cls, parser, match):
-            return cls(match.group(1))
+            fieldname = match.group(1)
+            if not parser.schema or (fieldname in parser.schema):
+                return cls(fieldname)
     
 
 class CompoundsPlugin(Plugin):
@@ -638,11 +703,11 @@ class CompoundsPlugin(Plugin):
     This plugin is included in the default parser configuration.
     """
     
-    def tokens(self):
+    def tokens(self, parser):
         return ((CompoundsPlugin.AndNot, -10), (CompoundsPlugin.And, 0),
                 (CompoundsPlugin.Or, 0))
     
-    def filters(self):
+    def filters(self, parser):
         return ((CompoundsPlugin.do_compounds, 600), )
 
     @staticmethod
@@ -708,10 +773,10 @@ class BoostPlugin(Plugin):
     This plugin is included in the default parser configuration.
     """
     
-    def tokens(self):
+    def tokens(self, parser):
         return ((BoostPlugin.Boost, 0), )
     
-    def filters(self):
+    def filters(self, parser):
         return ((BoostPlugin.clean_boost, 0), (BoostPlugin.do_boost, 700))
 
     @staticmethod
@@ -733,7 +798,7 @@ class BoostPlugin(Plugin):
             elif isinstance(t, BoostPlugin.Boost):
                 if newstream:
                     newstream.append(newstream.pop().set_boost(t.boost))
-            elif isinstance(t, BasicSyntax) and "^" in t.text:
+            elif isinstance(t, BasicSyntax) and hasattr(t, "text") and "^" in t.text:
                 carat = t.text.find("^")
                 if carat > 0:
                     try:
@@ -771,10 +836,10 @@ class NotPlugin(Plugin):
     This plugin is included in the default parser configuration.
     """
     
-    def tokens(self):
+    def tokens(self, parser):
         return ((NotPlugin.Not, 0), )
     
-    def filters(self):
+    def filters(self, parser):
         return ((NotPlugin.do_not, 800), )
     
     @staticmethod
@@ -802,10 +867,10 @@ class MinusNotPlugin(Plugin):
     prefer this to using ``NOT``.
     """
     
-    def tokens(self):
+    def tokens(self, parser):
         return ((PlusMinusPlugin.Minus, 0), )
     
-    def filters(self):
+    def filters(self, parser):
         return ((MinusNotPlugin.do_minus, 510), )
     
     @staticmethod
@@ -833,10 +898,10 @@ class PlusMinusPlugin(Plugin):
     ``SimpleParser()``.
     """
     
-    def tokens(self):
+    def tokens(self, parser):
         return ((PlusMinusPlugin.Plus, 0), (PlusMinusPlugin.Minus, 0))
     
-    def filters(self):
+    def filters(self, parser):
         return ((PlusMinusPlugin.do_plusminus, 510), )
     
     @staticmethod
@@ -884,7 +949,7 @@ class MultifieldPlugin(Plugin):
         self.fieldnames = fieldnames
         self.boosts = fieldboosts or {}
     
-    def filters(self):
+    def filters(self, parser):
         return ((self.do_multifield, 110), )
     
     def do_multifield(self, parser, stream):
@@ -911,7 +976,7 @@ class DisMaxPlugin(Plugin):
         self.fieldboosts = fieldboosts.items()
         self.tiebreak = tiebreak
     
-    def filters(self):
+    def filters(self, parser):
         return ((self.do_dismax, 110), )
     
     def do_dismax(self, parser, stream):
@@ -946,7 +1011,7 @@ class FieldAliasPlugin(Plugin):
             for value in values:
                 self.reverse[value] = key
         
-    def filters(self):
+    def filters(self, parser):
         return ((self.do_aliases, 90), )
     
     def do_aliases(self, parser, stream):
@@ -959,7 +1024,7 @@ class FieldAliasPlugin(Plugin):
             newstream.append(t)
         return newstream
 
-        
+
 # Parser object
 
 full_profile = (BoostPlugin, CompoundsPlugin, FieldsPlugin, GroupPlugin,
@@ -1041,10 +1106,17 @@ class QueryParser(object):
         
         self.plugins = [p for p in self.plugins if not isinstance(p, cls)]
     
+    def get_plugin(self, cls, derived=True):
+        for plugin in self.plugins:
+            if (derived and isinstance(plugin, cls)) or plugin.__class__ is cls:
+                return plugin
+        raise KeyError("No plugin with class %r" % cls)
+    
     def _priorized(self, methodname):
         items_and_priorities = []
         for plugin in self.plugins:
-            for item in getattr(plugin, methodname)():
+            method = getattr(plugin, methodname)
+            for item in method(self):
                 items_and_priorities.append(item)
         items_and_priorities.sort(key=lambda x: x[1])
         return [item for item, pri in items_and_priorities]
@@ -1062,7 +1134,7 @@ class QueryParser(object):
         
         return self._priorized("filters")
     
-    def parse(self, text, normalize=True):
+    def parse(self, text, normalize=True, debug=False):
         """Parses the input string and returns a Query object/tree.
         
         This method may return None if the input string does not result in any
@@ -1076,9 +1148,11 @@ class QueryParser(object):
         """
         
         stream = self._tokenize(text)
-        stream = self._filterize(stream)
+        stream = self._filterize(stream, debug)
+        
         q = stream.query(self)
-        #print "prenorm=", q
+        if debug:
+            print "Pre-normalized query=", q
         if normalize:
             q = q.normalize()
         return q
@@ -1098,9 +1172,14 @@ class QueryParser(object):
                     item = tk.create(self, m)
                     if item:
                         stack.append(item)
-                    prev = i = m.end()
-                    matched = True
-                    break
+                        if item.endpos is not None:
+                            newpos = item.endpos
+                        else:
+                            newpos = m.end()
+                        
+                        prev = i = newpos
+                        matched = True
+                        break
             
             if not matched:
                 i += 1
@@ -1111,10 +1190,20 @@ class QueryParser(object):
         #print "stack=", stack
         return self.group(stack)
     
-    def _filterize(self, stream):
+    def _filterize(self, stream, debug=False):
+        if debug:
+            print "Tokenized stream=", stream
+        
         for f in self.filters():
+            if debug:
+                print "Applying filter", f
+            
             stream = f(self, stream)
-            #print "filter=", f, "stream=", stream
+            if debug:
+                print "Stream=", stream
+            
+            if stream is None:
+                raise Exception("Function %s did not return a stream" % f)
         return stream
 
     def get_single_text(self, field, text, **kwargs):

@@ -219,10 +219,16 @@ class Searcher(object):
         >>> docnums = list(searcher.document_numbers(emailto=u"matt@whoosh.ca"))
         """
 
-        q = query.And([query.Term(k, v) for k, v in kw.iteritems()])
-        q = q.normalize()
-        if q:
-            return q.docs(self)
+        subqueries = []
+        for key, value in kw.iteritems():
+            field = self.schema[key]
+            text = field.to_text(value)
+            subqueries.append(query.Term(key, text))
+        if not subqueries:
+            return []
+        
+        q = query.And(subqueries).normalize()
+        return q.docs(self)
 
     def docset(self, q, exclude_docs=None):
         """Returns a set-like object containing the document numbers matching
@@ -412,7 +418,10 @@ def collect(searcher, matcher, limit=10, usequality=True, replace=True):
             id = matcher.id()
             h.append((matcher.score(), id))
             docs.add(id)
-            if replace: matcher = matcher.replace()
+            if replace:
+                matcher = matcher.replace()
+                if not matcher.is_active():
+                    break
             matcher.next()
     else:
         # Heap of (score, docnum, postingquality) tuples
@@ -516,7 +525,7 @@ class Results(object):
     def __len__(self):
         """Returns the total number of documents that matched the query. Note
         this may be more than the number of scored documents, given the value
-        of the ``limit`` keyword argument to :method:`Searcher.search`.
+        of the ``limit`` keyword argument to :meth:`Searcher.search`.
         """
         
         if self._docs is None:
@@ -534,8 +543,8 @@ class Results(object):
             d.score = None
 
     def fields(self, n):
-        """Returns the stored fields for the document at the ``n``th position
-        in the results. Use :method:`Results.docnum` if you want the raw
+        """Returns the stored fields for the document at the ``n`` th position
+        in the results. Use :meth:`Results.docnum` if you want the raw
         document number instead of the stored fields.
         """
         
@@ -859,8 +868,8 @@ class ResultsPage(object):
             raise ValueError("pagenum must be >= 1")
         
         self.pagecount = int(ceil(self.total / pagelen))
-        if pagenum > self.pagecount:
-            pagenum = self.pagecount
+        if pagenum > 1 and pagenum > self.pagecount:
+            raise ValueError("Asked for page %s of %s" % (pagenum, self.pagecount))
         
         self.pagenum = pagenum
 
@@ -895,6 +904,12 @@ class ResultsPage(object):
         page.
         """
         return self.results.scored_list[n + self.offset]
+    
+    def is_last_page(self):
+        """Returns True if this object represents the last page of results.
+        """
+        
+        return self.pagecount == 0 or self.pagenum == self.pagecount
 
 
 class Facets(object):
@@ -1024,10 +1039,10 @@ class Facets(object):
         :param fieldname: the name of the field to use to create the facets.
         """
         
-        fs = cls()
+        fs = cls(searcher)
         fs.queries = [(token, query.Term(fieldname, token))
                         for token in searcher.lexicon(fieldname)]
-        fs._study(searcher)
+        fs._study()
         return fs
     
     def facets(self):

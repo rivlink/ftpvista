@@ -87,6 +87,7 @@ class SegmentWriter(IndexWriter):
         self.ix = ix
         self.storage = ix.storage
         self.indexname = ix.indexname
+        self.is_closed = False
         
         info = ix._read_toc()
         self.schema = info.schema
@@ -146,12 +147,18 @@ class SegmentWriter(IndexWriter):
                 poolclass = TempfilePool
         self.pool = poolclass(self.schema, procs=procs, **poolargs)
     
+    def _check_state(self):
+        if self.is_closed:
+            raise IndexingError("This writer is closed")
+    
     def add_field(self, fieldname, fieldspec):
+        self._check_state()
         if self._added:
             raise Exception("Can't modify schema after adding data to writer")
         super(SegmentWriter, self).add_field(fieldname, fieldspec)
     
     def remove_field(self, fieldname):
+        self._check_state()
         if self._added:
             raise Exception("Can't modify schema after adding data to writer")
         super(SegmentWriter, self).remove_field(fieldname)
@@ -182,6 +189,7 @@ class SegmentWriter(IndexWriter):
         return any(s.has_deletions() for s in self.segments)
 
     def delete_document(self, docnum, delete=True):
+        self._check_state()
         segment, segdocnum = self._segment_and_docnum(docnum)
         segment.delete_document(segdocnum, delete=delete)
 
@@ -197,10 +205,12 @@ class SegmentWriter(IndexWriter):
         return segment.is_deleted(segdocnum)
 
     def searcher(self):
+        self._check_state()
         from whoosh.filedb.fileindex import FileIndex
         return FileIndex(self.storage, indexname=self.indexname).searcher()
     
     def add_reader(self, reader):
+        self._check_state()
         startdoc = self.docnum
         
         has_deletions = reader.has_deletions()
@@ -252,6 +262,7 @@ class SegmentWriter(IndexWriter):
         self._added = True
     
     def add_document(self, **fields):
+        self._check_state()
         schema = self.schema
         
         # Sort the keys
@@ -296,6 +307,7 @@ class SegmentWriter(IndexWriter):
         self.docnum += 1
     
     def update_document(self, **fields):
+        self._check_state()
         _unique_cache = self._unique_cache
         
         # Check which of the supplied fields are unique
@@ -308,7 +320,8 @@ class SegmentWriter(IndexWriter):
         # Delete documents matching the unique terms
         delset = set()
         for name in unique_fields:
-            text = fields[name]
+            field = self.schema[name]
+            text = field.to_text(fields[name])
             
             # If we've seen an update_document with this unique field before...
             if name in _unique_cache:
@@ -323,10 +336,12 @@ class SegmentWriter(IndexWriter):
                     term2docnum = {}
                     reader = self.searcher().reader()
                     for ttext in reader.lexicon(name):
-                        term2docnum[ttext] = reader.postings(name, ttext).id()
+                        postings = reader.postings(name, ttext)
+                        if postings.is_active():
+                            term2docnum[ttext] = postings.id()
                     reader.close()
                     _unique_cache[name] = term2docnum
-                    
+                
                 # Look up the cached document number for this term
                 delset.add(term2docnum[text])
             else:
@@ -374,6 +389,8 @@ class SegmentWriter(IndexWriter):
         self.vectorindex.add((docnum, fieldname), offset)
     
     def _close_all(self):
+        self.is_closed = True
+        
         self.termsindex.close()
         self.postwriter.close()
         self.storedfields.close()
@@ -417,6 +434,7 @@ class SegmentWriter(IndexWriter):
         :param merge: if False, do not merge small segments.
         """
         
+        self._check_state()
         try:
             if mergetype:
                 pass
@@ -461,6 +479,7 @@ class SegmentWriter(IndexWriter):
             self.writelock.release()
         
     def cancel(self):
+        self._check_state()
         try:
             self.pool.cancel()
             self._close_all()

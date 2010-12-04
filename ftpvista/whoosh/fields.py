@@ -18,11 +18,16 @@
 """
 
 import datetime, re, struct
+from decimal import Decimal
 
 from whoosh.analysis import (IDAnalyzer, RegexAnalyzer, KeywordAnalyzer,
                              StandardAnalyzer, NgramAnalyzer, Tokenizer,
                              NgramWordAnalyzer, Analyzer)
 from whoosh.formats import Format, Existence, Frequency, Positions
+from whoosh.support.numeric import (int_to_text, text_to_int, long_to_text,
+                                    text_to_long, float_to_text, text_to_float,
+                                    )
+from whoosh.support.times import datetime_to_long
 
 
 # Exceptions
@@ -146,6 +151,15 @@ class FieldType(object):
         
         raise NotImplementedError(self.__class__.__name__)
     
+    def parse_range(self, fieldname, start, end, startexcl, endexcl, boost=1.0):
+        """When ``self_parsing()`` returns True, the query parser will call
+        this method to parse range query text. If this method returns None
+        instead of a query object, the parser will fall back to parsing the
+        start and end terms using process_text().
+        """
+        
+        return None
+    
 
 class ID(FieldType):
     """Configured field type that indexes the entire value of the field as one
@@ -190,42 +204,112 @@ class IDLIST(FieldType):
 
 class NUMERIC(FieldType):
     """Special field type that lets you index int, long, or floating point
-    numbers. The field converts the number to sortable text for you before
-    indexing.
+    numbers in relatively short fixed-width terms. The field converts numbers
+    to sortable text for you before indexing.
     
-    You can specify the type of the field when you create the NUMERIC object.
-    The default is int.
+    You specify the numeric type of the field when you create the NUMERIC
+    object. The default is ``int``.
     
     >>> schema = Schema(path=STORED, position=NUMERIC(long))
     >>> ix = storage.create_index(schema)
     >>> w = ix.writer()
     >>> w.add_document(path="/a", position=5820402204)
     >>> w.commit()
+    
+    You can also use the NUMERIC field to store Decimal instances by specifying
+    a type of ``int`` or ``long`` and the ``decimal_places`` keyword argument.
+    This simply multiplies each number by ``(10 ** decimal_places)`` before
+    storing it as an integer. Of course this may throw away decimal prcesision
+    (by truncating, not rounding) and imposes the same maximum value limits as
+    ``int``/``long``, but these may be acceptable for certain applications.
+    
+    >>> from decimal import Decimal
+    >>> schema = Schema(path=STORED, position=NUMERIC(int, decimal_places=4))
+    >>> ix = storage.create_index(schema)
+    >>> w = ix.writer()
+    >>> w.add_document(path="/a", position=Decimal("123.45")
+    >>> w.commit()
     """
     
-    def __init__(self, type=int, stored=False, unique=False, field_boost=1.0):
+    def __init__(self, type=int, stored=False, unique=False, field_boost=1.0,
+                 decimal_places=0, shift_step=4, signed=True):
         """
         :param type: the type of numbers that can be stored in this field: one
-            of ``int``, ``long``, or ``float``.
+            of ``int``, ``long``, ``float``, or ``Decimal``.
         :param stored: Whether the value of this field is stored with the
             document.
         :param unique: Whether the value of this field is unique per-document.
+        :param decimal_places: specifies the number of decimal places to save
+            when storing Decimal instances as ``int`` or ``float``.
+        :param shift_steps: The number of bits of precision to shift away at
+            each tiered indexing level. Values should generally be 1-8. Lower
+            values yield faster searches but take up more space. A value
+            of `0` means no tiered indexing.
+        :param signed: Whether the numbers stored in this field may be
+            negative.
         """
         
         self.type = type
+        if self.type is int:
+            self._to_text = int_to_text
+            self._from_text = text_to_int
+        elif self.type is long:
+            self._to_text = long_to_text
+            self._from_text = text_to_long
+        elif self.type is float:
+            self._to_text =  float_to_text
+            self._from_text = text_to_float
+        elif self.type is Decimal:
+            raise TypeError("To store Decimal instances, set type to int or "
+                            "float and use the decimal_places argument")
+        else:
+            raise TypeError("%s field type can't store %r" % (self.__class__,
+                                                              self.type))
+        
         self.stored = stored
         self.unique = unique
+        self.decimal_places = decimal_places
+        self.shift_step = shift_step
+        self.signed = signed
         self.format = Existence(analyzer=IDAnalyzer(), field_boost=field_boost)
     
-    def index(self, num):
-        method = getattr(self, self.type.__name__ + "_to_text")
-        # word, freq, weight, valuestring
-        return [(method(num), 1, 1.0, '')]
+    def _tiers(self, num):
+        t = self.type
+        if t is int:
+            bitlen = 32
+        else:
+            bitlen = 64
+        
+        for shift in xrange(0, bitlen, self.shift_step):
+            yield self.to_text(num, shift=shift)
     
-    def to_text(self, x):
-        ntype = self.type
-        method = getattr(self, ntype.__name__ + "_to_text")
-        return method(ntype(x))
+    def index(self, num):
+        # word, freq, weight, valuestring
+        if self.shift_step:
+            return [(txt, 1, 1.0, '') for txt in self._tiers(num)]
+        else:
+            return [(self.to_text(num), 1, 1.0, '')]
+    
+    def prepare_number(self, x):
+        if x is None: return x
+        if self.decimal_places:
+            x = Decimal(x)
+            x *= 10 ** self.decimal_places
+        x = self.type(x)
+        return x
+    
+    def unprepare_number(self, x):
+        if self.decimal_places:
+            s = str(x)
+            x = Decimal(s[:-self.decimal_places] + "." + s[-self.decimal_places:])
+        return x
+    
+    def to_text(self, x, shift=0):
+        return self._to_text(self.prepare_number(x), shift=shift)
+    
+    def from_text(self, t):
+        x = self._from_text(t)
+        return self.unprepare_number(x)
     
     def process_text(self, text, **kwargs):
         return (self.to_text(text),)
@@ -235,47 +319,44 @@ class NUMERIC(FieldType):
     
     def parse_query(self, fieldname, qstring, boost=1.0):
         from whoosh import query
-        return query.Term(fieldname, self.to_text(qstring), boost=boost)
+        from whoosh.qparser import QueryParserError
+        
+        if qstring == "*":
+            return query.Every(fieldname, boost=boost)
+        
+        try:
+            text = self.to_text(qstring)
+        except Exception, e:
+            raise QueryParserError(e)
+        
+        return query.Term(fieldname, text, boost=boost)
     
-    @staticmethod
-    def int_to_text(x):
-        x += (1 << (4 << 2)) - 1 # 4 means 32-bits
-        return u"%08x" % x
-    
-    @staticmethod
-    def text_to_int(text):
-        x = int(text, 16)
-        x -= (1 << (4 << 2)) - 1
-        return x
-    
-    @staticmethod
-    def long_to_text(x):
-        x += (1 << (8 << 2)) - 1
-        return u"%016x" % x
-    
-    @staticmethod
-    def text_to_long(text):
-        x = long(text, 16)
-        x -= (1 << (8 << 2)) - 1
-        return x
-    
-    @staticmethod
-    def float_to_text(x):
-        x = struct.unpack("<q", struct.pack("<d", x))[0]
-        x += (1 << (8 << 2)) - 1
-        return u"%016x" % x
-    
-    @staticmethod
-    def text_to_float(text):
-        x = long(text, 16)
-        x -= (1 << (8 << 2)) - 1
-        x = struct.unpack("<d", struct.pack("<q", x))[0]
-        return x
+    def parse_range(self, fieldname, start, end, startexcl, endexcl, boost=1.0):
+        from whoosh import query
+        from whoosh.qparser import QueryParserError
+        
+        try:
+            if start is not None:
+                start = self.from_text(self.to_text(start))
+            if end is not None:
+                end = self.from_text(self.to_text(end))
+        except Exception, e:
+            raise QueryParserError(e)
+        
+        return query.NumericRange(fieldname, start, end, startexcl, endexcl,
+                                  boost=boost)
     
 
-class DATETIME(FieldType):
+class DATETIME(NUMERIC):
     """Special field type that lets you index datetime objects. The field
     converts the datetime objects to sortable text for you before indexing.
+    
+    Since this field is based on Python's datetime module it shares all the
+    limitations of that module, such as the inability to represent dates before
+    year 1 in the proleptic Gregorian calendar. However, since this field
+    stores datetimes as an integer number of microseconds, it could easily
+    represent a much wider range of dates if the Python datetime implementation
+    ever supports them.
     
     >>> schema = Schema(path=STORED, date=DATETIME)
     >>> ix = storage.create_index(schema)
@@ -293,32 +374,73 @@ class DATETIME(FieldType):
         :param unique: Whether the value of this field is unique per-document.
         """
         
-        self.stored = stored
-        self.unique = unique
-        self.format = Existence(None)
+        super(DATETIME, self).__init__(type=long, stored=stored, unique=unique,
+                                       shift_step=8)
     
-    def to_text(self, dt):
-        if not isinstance(dt, datetime.datetime):
-            raise ValueError("%r is not a datetime object" % dt)
-        text = dt.isoformat() # 2010-02-02T17:06:19.109000
-        text = text.replace(" ", "").replace(":", "").replace("-", "").replace(".", "")
-        return text
+    def to_text(self, x, shift=0):
+        if isinstance(x, datetime.datetime):
+            x = datetime_to_long(x)
+        elif not isinstance(x, (int, long)):
+            raise ValueError("DATETIME.to_text field doesn't know what to do "
+                             "with %r" % x)
+        
+        return super(DATETIME, self).to_text(x, shift=shift)
     
-    def index(self, dt):
-        # word, freq, weight, valuestring
-        return [(self.to_text(dt), 1, 1.0, '')]
-    
-    def process_text(self, text, **kwargs):
-        text = text.replace(" ", "").replace(":", "").replace("-", "").replace(".", "")
-        return (text, )
-    
-    def self_parsing(self):
-        return True
+    def _parse_datestring(self, qstring):
+        # This method does parses a very simple datetime representation of
+        # the form YYYY[MM[DD[hh[mm[ss[uuuuuu]]]]]]
+        from whoosh.support.times import adatetime, fix, is_void
+        
+        qstring = qstring.replace(" ", "").replace("-", "").replace(".", "")
+        year = month = day = hour = minute = second = microsecond = None
+        if len(qstring) >= 4:
+            year = int(qstring[:4])
+        if len(qstring) >= 6:
+            month = int(qstring[4:6])
+        if len(qstring) >= 8:
+            day = int(qstring[6:8])
+        if len(qstring) >= 10:
+            hour = int(qstring[8:10])
+        if len(qstring) >= 12:
+            minute = int(qstring[10:12])
+        if len(qstring) >= 14:
+            second = int(qstring[12:14])
+        if len(qstring) == 20:
+            microsecond = int(qstring[14:])
+        
+        at = fix(adatetime(year, month, day, hour, minute, second, microsecond))
+        if is_void(at):
+            raise Exception("%r is not a parseable date" % qstring)
+        return at
     
     def parse_query(self, fieldname, qstring, boost=1.0):
-        text = self.process_text(qstring)[0]
         from whoosh import query
-        return query.Prefix(fieldname, text, boost=boost)
+        from whoosh.support.times import is_ambiguous
+        
+        at = self._parse_datestring(qstring)
+        if is_ambiguous(at):
+            startnum = datetime_to_long(at.floor())
+            endnum = datetime_to_long(at.ceil())
+            return query.NumericRange(fieldname, startnum, endnum)
+        else:
+            return query.Term(fieldname, self.to_text(at), boost=boost)
+    
+    def parse_range(self, fieldname, start, end, startexcl, endexcl, boost=1.0):
+        from whoosh import query
+        
+        if start is None and end is None:
+            return query.Every(fieldname, boost=boost)
+        
+        if start is not None:
+            startdt = self._parse_datestring(start).floor()
+            start = datetime_to_long(startdt)
+        
+        if end is not None:
+            enddt = self._parse_datestring(end).ceil()
+            end = datetime_to_long(enddt)
+        
+        return query.NumericRange(fieldname, start, end, boost=boost)
+        
     
 
 class BOOLEAN(FieldType):
@@ -332,7 +454,7 @@ class BOOLEAN(FieldType):
     >>> w.commit()
     """
     
-    strings = (u"t", u"f")
+    strings = (u"f", u"t")
     trues = frozenset((u"t", u"true", u"yes", u"1"))
     falses = frozenset((u"f", u"false", u"no", u"0"))
     
@@ -348,7 +470,9 @@ class BOOLEAN(FieldType):
         self.format = Existence(None)
     
     def to_text(self, bit):
-        if not isinstance(bit, bool):
+        if isinstance(bit, basestring):
+            bit = bit in self.trues
+        elif not isinstance(bit, bool):
             raise ValueError("%r is not a boolean")
         return self.strings[int(bit)]
     
@@ -363,13 +487,15 @@ class BOOLEAN(FieldType):
     def parse_query(self, fieldname, qstring, boost=1.0):
         from whoosh import query
         text = None
-        if qstring in self.falses:
-            text = self.strings[0]
-        elif qstring in self.trues:
-            text = self.strings[1]
         
-        if text is None:
+        if qstring == "*":
+            return query.Every(fieldname, boost=boost)
+        
+        try:
+            text = self.to_text(qstring)
+        except ValueError:
             return query.NullQuery
+        
         return query.Term(fieldname, text, boost=boost)
     
 

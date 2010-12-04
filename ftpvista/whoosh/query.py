@@ -27,15 +27,17 @@ __all__ = ("QueryError", "Query", "CompoundQuery", "MultiTerm", "Term", "And",
 
 import copy
 import fnmatch, re
+from array import array
 
 from whoosh.lang.morph_en import variations
 from whoosh.matching import (AndMaybeMatcher, DisjunctionMaxMatcher,
                              ListMatcher, IntersectionMatcher, InverseMatcher,
                              NullMatcher, RequireMatcher, UnionMatcher,
-                             WrappingMatcher)
+                             WrappingMatcher, ConstantScoreMatcher)
 from whoosh.reading import TermNotFound
 from whoosh.support.bitvector import BitVector
 from whoosh.support.levenshtein import relative
+from whoosh.support.times import datetime_to_long
 from whoosh.util import make_binary_tree
 
 
@@ -252,6 +254,34 @@ class Query(object):
         return visitor(copy.deepcopy(self))
 
 
+class WrappingQuery(Query):
+    def __init__(self, child):
+        self.child = child
+        
+    def copy(self):
+        return self.__class__(self.child)
+    
+    def all_terms(self, termset=None, phrases=True):
+        return self.child.all_terms(termset=termset, phrases=phrases)
+    
+    def existing_terms(self, ixreader, termset=None, reverse=False,
+                       phrases=True):
+        return self.child.existing_terms(ixreader, termset=termset,
+                                         reverse=reverse, phrases=phrases)
+    
+    def estimate_size(self, ixreader):
+        return self.child.estimate_size(ixreader)
+    
+    def matcher(self, searcher, exclude_docs=None):
+        return self.child.matcher(searcher, exclude_docs=exclude_docs)
+    
+    def replace(self, oldtext, newtext):
+        return self.__class__(self.child.replace(oldtext, newtext))
+    
+    def accept(self, visitor):
+        return self.__class__(self.child.accept(visitor))
+
+
 class CompoundQuery(Query):
     """Abstract base class for queries that combine or manipulate the results
     of multiple sub-queries .
@@ -355,9 +385,9 @@ class CompoundQuery(Query):
 
         if subs:
             subs = self.__class__([subq.simplify(ixreader) for subq in subs],
-                                  boost=self.boost)
+                                  boost=self.boost).normalize()
             if nots:
-                nots = Or(nots).normalize().simplify()
+                nots = Or(nots).simplify().normalize()
                 return AndNot(subs, nots)
             else:
                 return subs
@@ -377,6 +407,11 @@ class CompoundQuery(Query):
     def _matcher(self, matchercls, searcher, exclude_docs, **kwargs):
         submatchers = self._submatchers(searcher, exclude_docs)
         
+        if len(submatchers) == 1:
+            return submatchers[0]
+        if not submatchers:
+            return NullMatcher()
+        
         tree = make_binary_tree(matchercls, submatchers, **kwargs)
         if self.boost == 1.0:
             return tree
@@ -393,8 +428,14 @@ class MultiTerm(Query):
         raise NotImplementedError
 
     def simplify(self, ixreader):
-        return Or([Term(self.fieldname, word, boost=self.boost)
-                   for word in self._words(ixreader)])
+        existing = [Term(self.fieldname, word, boost=self.boost)
+                    for word in sorted(set(self._words(ixreader)))]
+        if len(existing) == 1:
+            return existing[0]
+        elif existing:
+            return Or(existing)
+        else:
+            return NullQuery
 
     def _all_terms(self, termset, phrases=True):
         pass
@@ -415,11 +456,14 @@ class MultiTerm(Query):
     def matcher(self, searcher, exclude_docs=None):
         fieldname = self.fieldname
         qs = [Term(fieldname, word) for word in self._words(searcher.reader())]
-        if qs:
-            return Or(qs).matcher(searcher, exclude_docs=exclude_docs)
+        if not qs: return NullMatcher()
+        
+        if len(qs) == 1:
+            q = qs[0]
         else:
-            return NullMatcher()
-
+            q = Or(qs)
+        return q.matcher(searcher, exclude_docs=exclude_docs)
+        
 
 # Concrete classes
 
@@ -882,6 +926,12 @@ class TermRange(MultiTerm):
         self.endexcl = endexcl
         self.boost = boost
 
+    def __repr__(self):
+        return '%s(%r, %r, %r, %s, %s)' % (self.__class__.__name__,
+                                           self.fieldname,
+                                           self.start, self.end,
+                                           self.startexcl, self.endexcl)
+
     def __eq__(self, other):
         return (other
                 and self.__class__ is other.__class__
@@ -891,12 +941,6 @@ class TermRange(MultiTerm):
                 and self.startexcl == other.startexcl
                 and self.endexcl == other.endexcl
                 and self.boost == other.boost)
-
-    def __repr__(self):
-        return '%s(%r, %r, %r, %s, %s)' % (self.__class__.__name__,
-                                           self.fieldname,
-                                           self.start, self.end,
-                                           self.startexcl, self.endexcl)
 
     def __unicode__(self):
         startchar = "["
@@ -912,7 +956,11 @@ class TermRange(MultiTerm):
                               boost=self.boost)
 
     def normalize(self):
-        if self.start == self.end:
+        if self.start in ('', None) and self.end in (u'\uffff', None):
+            return Every(self.fieldname, boost=self.boost)
+        elif self.start == self.end:
+            if self.startexcl or self.endexcl:
+                return NullQuery
             return Term(self.fieldname, self.start, boost=self.boost)
         else:
             return TermRange(self.fieldname, self.start, self.end,
@@ -947,6 +995,148 @@ class TermRange(MultiTerm):
                 break
             yield t
 
+
+class NumericRange(Query):
+    """A range query for NUMERIC fields. Takes advantage of tiered indexing
+    to speed up large ranges by matching at a high resolution at the edges of
+    the range and a low resolution in the middle.
+    
+    >>> # Match numbers from 10 to 5925 in the "number" field.
+    >>> nr = NumericRange("number", 10, 5925)
+    """
+    
+    def __init__(self, fieldname, start, end, startexcl=False, endexcl=False,
+                 boost=1.0, constantscore=True):
+        """
+        :param fieldname: The name of the field to search.
+        :param start: Match terms equal to or greater than this number. This
+            should be a number type, not a string.
+        :param end: Match terms equal to or less than this number. This should
+            be a number type, not a string.
+        :param startexcl: If True, the range start is exclusive. If False, the
+            range start is inclusive.
+        :param endexcl: If True, the range end is exclusive. If False, the
+            range end is inclusive.
+        :param boost: Boost factor that should be applied to the raw score of
+            results matched by this query.
+        :param constantscore: If True, the compiled query returns a constant
+            score (the value of the ``boost`` keyword argument) instead of
+            actually scoring the matched terms. This gives a nice speed boost
+            and won't affect the results in most cases since numeric ranges
+            will almost always be used as a filter.
+        """
+
+        self.fieldname = fieldname
+        self.start = start
+        self.end = end
+        self.startexcl = startexcl
+        self.endexcl = endexcl
+        self.boost = boost
+        self.constantscore = constantscore
+    
+    def __repr__(self):
+        return '%s(%r, %r, %r, %s, %s, boost=%s)' % (self.__class__.__name__,
+                                           self.fieldname,
+                                           self.start, self.end,
+                                           self.startexcl, self.endexcl,
+                                           self.boost)
+
+    def __eq__(self, other):
+        return (other
+                and self.__class__ is other.__class__
+                and self.fieldname == other.fieldname
+                and self.start == other.start
+                and self.end == other.end
+                and self.startexcl == other.startexcl
+                and self.endexcl == other.endexcl
+                and self.boost == other.boost)
+        
+    def __unicode__(self):
+        startchar = "["
+        if self.startexcl: startchar = "{"
+        endchar = "]"
+        if self.endexcl: endchar = "}"
+        return u"%s:%s%s TO %s%s" % (self.fieldname,
+                                     startchar, self.start, self.end, endchar)
+    
+    def copy(self):
+        return NumericRange(self.fieldname, self.start, self.end,
+                            self.startexcl, self.endexcl, boost=self.boost)
+    
+    def simplify(self, ixreader):
+        return self._compile_query(ixreader).simplify(ixreader)
+    
+    def estimate_size(self, ixreader):
+        return self._compile_query(ixreader).estimate_size(ixreader)
+    
+    def docs(self, searcher, exclude_docs=None):
+        q = self._compile_query(searcher.reader())
+        return q.docs(searcher, exclude_docs=exclude_docs)
+    
+    def _compile_query(self, ixreader):
+        from whoosh.fields import NUMERIC
+        from whoosh.support.numeric import tiered_ranges
+        
+        field = ixreader.field(self.fieldname)
+        if not isinstance(field, NUMERIC):
+            raise Exception("NumericRange: field %r is not numeric" % self.fieldname)
+        
+        start = field.prepare_number(self.start)
+        end = field.prepare_number(self.end)
+        
+        subqueries = []
+        # Get the term ranges for the different resolutions
+        for starttext, endtext in tiered_ranges(field.type, field.signed,
+                                                start, end, field.shift_step,
+                                                self.startexcl, self.endexcl):
+            if starttext == endtext:
+                subq = Term(self.fieldname, starttext)
+            else:
+                subq = TermRange(self.fieldname, starttext, endtext)
+            subqueries.append(subq)
+        
+        if len(subqueries) == 1:
+            q = subqueries[0] 
+        elif subqueries:
+            q = Or(subqueries, boost=self.boost)
+        else:
+            return NullQuery
+        
+        if self.constantscore:
+            q = ConstantScoreQuery(q, self.boost)
+        return q
+        
+    def matcher(self, searcher, exclude_docs=None):
+        q = self._compile_query(searcher.reader())
+        return q.matcher(searcher, exclude_docs=exclude_docs)
+
+
+class DateRange(NumericRange):
+    """This is a very thin subclass of :class:`NumericRange` that only
+    overrides the initializer and ``__repr__()`` methods to work with datetime
+    objects instead of numbers. Internally this object converts the datetime
+    objects it's created with to numbers and otherwise acts like a
+    ``NumericRange`` query.
+    
+    >>> DateRange("date", datetime(2010, 11, 3, 3, 0), datetime(2010, 11, 3, 17, 59))
+    """
+    
+    def __init__(self, fieldname, start, end, startexcl=False, endexcl=False,
+                 boost=1.0, constantscore=True):
+        self.startdate = start
+        self.enddate = end
+        super(DateRange, self).__init__(fieldname, datetime_to_long(start),
+                                        datetime_to_long(end),
+                                        startexcl=startexcl, endexcl=endexcl,
+                                        boost=boost, constantscore=constantscore)
+    
+    def __repr__(self):
+        return '%s(%r, %r, %r, %s, %s, boost=%s)' % (self.__class__.__name__,
+                                           self.fieldname,
+                                           self.startdate, self.enddate,
+                                           self.startexcl, self.endexcl,
+                                           self.boost)
+    
 
 class Variations(MultiTerm):
     """Query that automatically searches for morphological variations of the
@@ -1109,6 +1299,10 @@ class Every(Query):
         self.fieldname = fieldname
         self.boost = boost
 
+    def __repr__(self):
+        return "%s(%r, boost=%s)" % (self.__class__.__name__, self.fieldname,
+                                     self.boost)
+
     def __eq__(self, other):
         return (other
                 and self.__class__ is other.__class__
@@ -1128,12 +1322,13 @@ class Every(Query):
         fieldname = self.fieldname
         s = set()
         
+        # This is a hacky hack, but just create an in-memory set of all the
+        # document numbers of every term in the field
         for text in searcher.lexicon(fieldname):
             pr = searcher.postings(fieldname, text)
-            s = s.union(pr.all_ids())
-        
+            s.update(pr.all_ids())
         if exclude_docs:
-            s.difference(exclude_docs)
+            s.difference_update(exclude_docs)
         
         return ListMatcher(sorted(s), weight=self.boost)
 
@@ -1142,6 +1337,8 @@ class NullQuery(Query):
     "Represents a query that won't match anything."
     def __call__(self):
         return self
+    def __repr__(self):
+        return "<%s>" % (self.__class__.__name__, )
     def copy(self):
         return self
     def estimate_size(self, ixreader):
@@ -1155,6 +1352,82 @@ class NullQuery(Query):
     def matcher(self, searcher, exclude_docs=None):
         return NullMatcher()
 NullQuery = NullQuery()
+
+
+class ConstantScoreQuery(WrappingQuery):
+    """Wraps a query and uses a matcher that always gives a constant score
+    to all matching documents. This is a useful optimization when you don't
+    care about scores from a certain branch of the query tree because it is
+    simply acting as a filter. See also the :class:`AndMaybe` query.
+    """
+    
+    def __init__(self, child, score=1.0):
+        super(ConstantScoreQuery, self).__init__(child)
+        self.score = score
+    
+    def copy(self):
+        return self.__class__(self.child, self.score)
+    
+    def matcher(self, searcher, exclude_docs=None):
+        m = self.child.matcher(searcher, exclude_docs=None)
+        if isinstance(m, NullMatcher):
+            return m
+        else:
+            return ListMatcher(array("I", m.all_ids()), weight=self.score)
+        
+    def replace(self, oldtext, newtext):
+        return self.__class__(self.child.replace(oldtext, newtext), self.score)
+    
+    def accept(self, visitor):
+        return self.__class__(self.child.accept(visitor), self.score)
+
+
+class WeightingQuery(WrappingQuery):
+    """Wraps a query and specifies a custom weighting model to apply to the
+    wrapped branch of the query tree. This is useful when you want to score
+    parts of the query using criteria that don't apply to the rest of the
+    query.
+    """
+    
+    def __init__(self, child, model, fieldname=None, text=None):
+        super(WeightingQuery, self).__init__(child)
+        self.model = model
+        self.fieldname = fieldname
+        self.text = text
+        
+    def copy(self):
+        return self.__class__(self.child, self.model)
+    
+    def matcher(self, searcher, exclude_docs=None):
+        m = self.child.matcher(searcher, exclude_docs=exclude_docs)
+        scorer = self.model.scorer(searcher, self.fieldname, self.text)
+        if isinstance(m, NullMatcher):
+            return m
+        else:
+            return WeightingQuery.CustomScorerMatcher(m, scorer)
+    
+    class CustomScorerMatcher(WrappingMatcher):
+        def __init__(self, child, scorer):
+            super(WeightingQuery, self).__init__(child)
+            self.scorer = scorer
+        
+        def copy(self):
+            return self.__class__(self.child.copy(), self.scorer)
+        
+        def _replacement(self, newchild):
+            return self.__class__(newchild, self.scorer)
+        
+        def supports_quality(self):
+            return self.scorer.supports_quality()
+        
+        def quality(self):
+            return self.scorer.quality(self)
+        
+        def block_quality(self):
+            return self.scorer.block_quality(self)
+        
+        def score(self):
+            return self.scorer.score(self)
 
 
 class Require(CompoundQuery):

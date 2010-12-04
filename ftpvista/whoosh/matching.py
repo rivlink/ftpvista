@@ -211,7 +211,7 @@ class Matcher(object):
         """Moves this matcher to the next posting.
         """
         
-        raise NotImplementedError
+        raise NotImplementedError(self.__class__.__name__)
     
     def weight(self):
         """Returns the weight of the current posting.
@@ -235,7 +235,10 @@ class NullMatcher(Matcher):
     
     def all_ids(self):
         return []
-
+    
+    def copy(self):
+        return self
+    
 
 class ListMatcher(Matcher):
     """Synthetic matcher backed by a list of IDs.
@@ -291,11 +294,21 @@ class WrappingMatcher(Matcher):
     def depth(self):
         return 1 + self.child.depth()
     
+    def _replacement(self, newchild):
+        return self.__class__(newchild, boost=self.boost)
+    
     def replace(self):
         r = self.child.replace()
-        if not r.is_active(): return NullMatcher()
-        if r is not self.child: return self.__class__(r)
-        return self
+        if not r.is_active():
+            return NullMatcher()
+        if r is not self.child:
+            try:
+                return self._replacement(r)
+            except TypeError, e:
+                raise TypeError("Class %s got exception %s trying "
+                                "to replace itself" % (self.__class__, e))
+        else:
+            return self
     
     def id(self):
         return self.child.id()
@@ -341,7 +354,7 @@ class WrappingMatcher(Matcher):
     
     def score(self):
         return self.child.score() * self.boost
-    
+
 
 class MultiMatcher(Matcher):
     """Serializes the results of a list of sub-matchers.
@@ -472,6 +485,9 @@ class ExcludeMatcher(WrappingMatcher):
     def copy(self):
         return self.__class__(self.child.copy(), self.excluded, boost=self.boost)
     
+    def _replacement(self, newchild):
+        return self.__class__(newchild, self.excluded, boost=self.boost)
+    
     def _find_next(self):
         child = self.child
         excluded = self.excluded
@@ -592,6 +608,8 @@ class UnionMatcher(AdditiveBiMatcher):
         if not b.is_active(): return a.id()
         return min(a.id(), b.id())
     
+    # Using sets is faster in most cases, but could potentially use a lot of
+    # memory
     def all_ids(self):
         return iter(sorted(set(self.a.all_ids()) | set(self.b.all_ids())))
     
@@ -775,6 +793,8 @@ class IntersectionMatcher(AdditiveBiMatcher):
     def id(self):
         return self.a.id()
     
+    # Using sets is faster in some cases, but could potentially use a lot of
+    # memory
     def all_ids(self):
         return iter(sorted(set(self.a.all_ids()) & set(self.b.all_ids())))
     
@@ -925,6 +945,10 @@ class InverseMatcher(WrappingMatcher):
     def copy(self):
         return self.__class__(self.child.copy(), self.limit,
                               weight=self._weight, missing=self.missing)
+    
+    def _replacement(self, newchild):
+        return self.__class__(newchild, self.limit, missing=self.missing,
+                              weight=self.weight)
     
     def is_active(self):
         return self._id < self.limit
@@ -1105,7 +1129,29 @@ class AndMaybeMatcher(AdditiveBiMatcher):
         
     def value_as(self, astype):
         return self.a.value_as(astype)
+
+
+class ConstantScoreMatcher(WrappingMatcher):
+    def __init__(self, child, score=1.0):
+        super(ConstantScoreMatcher, self).__init__(child)
+        self._score = score
     
+    def copy(self):
+        return self.__class__(self.child.copy(), score=self._score)
+    
+    def _replacement(self, newchild):
+        return self.__class__(newchild, score=self._score)
+    
+    def quality(self):
+        return self._score
+    
+    def block_quality(self):
+        return self._score
+    
+    def score(self):
+        return self._score
+    
+
 
 #class PhraseMatcher(WrappingMatcher):
 #    """Matches postings where a list of sub-matchers occur next to each other

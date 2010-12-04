@@ -147,6 +147,24 @@ def varint_to_int(vi):
         shift += 7
     return i
 
+
+def signed_varint(i):
+    """Zig-zag encodes a signed integer into a varint.
+    """
+    
+    if i >= 0:
+        return varint(i << 1)
+    return varint((i << 1) ^ (~0))
+
+def decode_signed_varint(i):
+    """Zig-zag decodes an integer value.
+    """
+    
+    if not i & 1:
+        return i >> 1
+    return (i >> 1) ^ (~0)
+
+
 def read_varint(readfn):
     """
     Reads a variable-length encoded integer.
@@ -288,41 +306,6 @@ def prefix_decode_all(ls):
         last = decoded
 
 
-def to_7bit(x, islong):
-    if not islong:
-        shift = 31
-        nchars = 5
-    else:
-        shift = 62
-        nchars = 10
-
-    buffer = array("c", "\x00" * nchars)
-    x += (1 << shift) - 1
-    while x:
-        buffer[nchars - 1] = chr(x & 0x7f)
-        x >>= 7
-        nchars -= 1
-        return buffer.tostring()
-
-def from_7bit(text):
-    if len(text) == 5:
-        shift = 31
-    elif len(text) == 10:
-        shift = 62
-    else:
-        raise ValueError("text is not 5 or 10 bytes")
-
-    x = 0
-    for char in text:
-        x <<= 7
-        char = ord(char)
-        if char > 0x7f:
-            raise Exception
-        x |= char
-    x -= (1 << shift) - 1
-    return x
-
-
 _nkre = re.compile(r"\D+|\d+", re.UNICODE)
 def _nkconv(i):
     try:
@@ -378,63 +361,47 @@ def protected(func):
     return protected_wrapper
     
 
-def lru_cache(size):
-    """Decorator that adds a least-recently-accessed cache to a method.
+class LRUCache(object):
+    def __init__(self, size):
+        self.size = size
+        self.clock = []
+        for i in xrange(0, size):
+            self.clock.append([None, False])
+        self.hand = 0
+        self.data = {}
+
+    def __contains__(self, key):
+        return key in self.data
     
-    :param size: the maximum number of items to keep in the cache.
-    """
+    def __getitem__(self, key):
+        pos, val = self.data[key]
+        self.clock[pos][1] = True
+        self.hand = (pos + 1) % self.size
+        return val
+        
+    def __setitem__(self, key, val):
+        size = self.size
+        hand = self.hand
+        clock = self.clock
+        data = self.data
 
-    def decorate_function(func):
-        prefix = "_%s_" % func.__name__
-
-        @wraps(func)
-        def lru_wrapper(self, *args):
-            if not hasattr(self, prefix + "cache"):
-                cache = {}
-                queue = deque()
-                refcount = defaultdict(int)
-                setattr(self, prefix + "cache", cache)
-                setattr(self, prefix + "queue", queue)
-                setattr(self, prefix + "refcount", refcount)
-            else:
-                cache = getattr(self, prefix + "cache")
-                queue = getattr(self, prefix + "queue")
-                refcount = getattr(self, prefix + "refcount")
-            qpend = queue.append
-            qpop = queue.popleft
-
-            # Get cache entry or compute if not found
-            try:
-                result = cache[args]
-            except KeyError:
-                result = cache[args] = func(self, *args)
-
-            # Record that this key was recently accessed
-            qpend(args)
-            refcount[args] += 1
-
-            # Purge least recently accessed cache contents
-            while len(cache) > size:
-                k = qpop()
-                refcount[k] -= 1
-                if not refcount[k]:
-                    del cache[k]
-                    del refcount[k]
-
-            # Periodically compact the queue by removing duplicate keys
-            if len(queue) > size * 4:
-                for _ in xrange(len(queue)):
-                    k = qpop()
-                    if refcount[k] == 1:
-                        qpend(k)
-                    else:
-                        refcount[k] -= 1
-                #assert len(queue) == len(cache) == len(refcount) == sum(refcount.itervalues())
-
-            return result
-        return lru_wrapper
-    return decorate_function
-
+        end = (hand or size) - 1
+        while True:
+            current = clock[hand]
+            ref = current[1]
+            if ref:
+                current[1] = False
+                hand = (hand + 1) % size
+            elif ref is False or hand == end:
+                oldkey = current[0]
+                if oldkey in data:
+                    del data[oldkey]
+                current[0] = key
+                current[1] = True
+                data[key] = (hand, val)
+                hand = (hand + 1) % size
+                self.hand = hand
+                return
 
 
 

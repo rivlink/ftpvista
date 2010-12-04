@@ -132,19 +132,16 @@ def write_postings(schema, termtable, lengths, postwriter, postiter):
 class PoolBase(object):
     def __init__(self, schema, dir=None, basename=''):
         self.schema = schema
+        self._using_tempdir = False
         if dir is None:
             dir = tempfile.mkdtemp(".whoosh")
+            self._using_tempdir = True
         self.dir = dir
         self.basename = basename
         
         self.length_arrays = {}
         self._fieldlength_totals = defaultdict(int)
         self._fieldlength_maxes = {}
-    
-    # Magne - 2010-10-09
-    def __del__(self):
-        os.removedirs(self.dir)
-    # End Magne
     
     def _filename(self, name):
         return os.path.abspath(os.path.join(self.dir, self.basename + name))
@@ -257,6 +254,13 @@ class TempfilePool(PoolBase):
                     os.remove(filename)
                 except IOError:
                     pass
+        if self._using_tempdir:
+            try:
+                os.rmdir(self.dir)
+            except OSError:
+                # directory didn't exist or was not empty -- don't
+                # accidentially delete data
+                pass
     
     def finish(self, doccount, lengthfile, termtable, postingwriter):
         self._write_lengths(lengthfile, doccount)
