@@ -163,7 +163,10 @@ def main(options):
         signal.SIGINT: 'sigterm_handler',
         #signal.SIGUSR1: reload_program_config,
     }
-    context.detach_process = True
+    if options.daemon:
+        context.detach_process = True
+    else:
+        context.detach_process = False
     context.sigterm_handler = sigterm_handler
     
     context.open()
