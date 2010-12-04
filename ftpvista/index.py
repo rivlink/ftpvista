@@ -14,7 +14,7 @@ from whoosh.analysis import StandardAnalyzer
 from whoosh.query import Term
 from whoosh.writing import BatchWriter
 from whoosh.analysis import CharsetFilter, StemmingAnalyzer
-from whoosh.support.charset import default_charset, charset_table_to_dict
+from whoosh.support.charset import accent_map
 
 import persist as ftpvista_persist
 import pipeline
@@ -38,8 +38,8 @@ class Index (object):
         self._writer = BatchWriter(self._idx, 30, 1000)
 
     def get_schema(self):
-        charmap = charset_table_to_dict(default_charset)
-        my_analyzer = StemmingAnalyzer | CharsetFilter(charmap)
+        analyzer = StemmingAnalyzer()
+        my_analyzer = analyzer | CharsetFilter(accent_map)
         return Schema(server_id=ID(stored=True),
                       path=TEXT(analyzer=my_analyzer, stored=True),
                       name=TEXT(analyzer=my_analyzer, stored=True),
@@ -298,7 +298,7 @@ class IndexUpdateCoordinator(object):
     def update_server(self, server_addr):
         """Update the server at the given address if an update is needed."""
         server = self._persist.get_server_by_ip(server_addr)
-
+        
         if(datetime.now() - server.get_last_scanned()) >= self._update_interval:
             self._do_update(server)
         
