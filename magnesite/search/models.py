@@ -28,28 +28,10 @@ def search(query, limit=1000):
 
         return is_online_cache[server]
     
-    def get_schema():
-        charmap = charset_table_to_dict(default_charset)
-        my_analyzer = StemmingAnalyzer | CharsetFilter(charmap)
-        return Schema(server_id=ID(stored=True),
-                      path=TEXT(analyzer=my_analyzer, stored=True),
-                      name=TEXT(analyzer=my_analyzer, stored=True),
-                      size=ID(stored=True),
-                      mtime=ID(stored=True),
-                      audio_album=TEXT(analyzer=my_analyzer,
-                                       stored=True),
-                      audio_performer=TEXT(analyzer=my_analyzer,
-                                           stored=True),
-                      audio_title=TEXT(analyzer=my_analyzer,
-                                       stored=True),
-                      audio_track=ID(stored=True),
-                      audio_year=ID(stored=True)
-                      )
-    
     searcher = index.searcher()
     parser = MultifieldParser(["name", "path", "audio_performer", "audio_title",
                                "audio_album"],
-                              schema=get_schema())
+                              schema=index.schema)
     parser.add_plugin(PhrasePlugin)
     parser.add_plugin(SingleQuotesPlugin)
     parser.add_plugin(MinusNotPlugin)
