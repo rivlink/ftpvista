@@ -150,26 +150,23 @@ def main(options):
     config.read(options.config_file)
     
     """Daemonize FTPVista"""
-    
-    #Context
-    context = daemon.DaemonContext(
-        working_directory = config.get('indexer', 'working_directory')
-    )
-    
-    #Mapping signals to methods
-    context.signal_map = {
-        signal.SIGTERM: 'sigterm_handler',
-        signal.SIGHUP: 'sigterm_handler',
-        signal.SIGINT: 'sigterm_handler',
-        #signal.SIGUSR1: reload_program_config,
-    }
     if options.daemon:
+        #Context
+        context = daemon.DaemonContext(
+            working_directory = config.get('indexer', 'working_directory')
+        )
+        
+        #Mapping signals to methods
+        context.signal_map = {
+            signal.SIGTERM: 'sigterm_handler',
+            signal.SIGHUP: 'sigterm_handler',
+            signal.SIGINT: 'sigterm_handler',
+            #signal.SIGUSR1: reload_program_config,
+        }
         context.detach_process = True
-    else:
-        context.detach_process = False
-    context.sigterm_handler = sigterm_handler
+        context.sigterm_handler = sigterm_handler
+        context.open()
     
-    context.open()
     if options.only_check_online:
         create_pid_file(config.get('online_checker', 'pid'))
         flock = lockfile.FileLock(config.get('online_checker', 'pid'))
