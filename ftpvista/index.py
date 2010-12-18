@@ -38,7 +38,7 @@ class Index (object):
         self._writer = BatchWriter(self._idx, 30, 1000)
 
     def get_schema(self):
-        analyzer = StemmingAnalyzer()
+        analyzer = StemmingAnalyzer('([a-zA-Z0-9])+')
         my_analyzer = analyzer | CharsetFilter(accent_map)
         return Schema(server_id=ID(stored=True),
                       path=TEXT(analyzer=my_analyzer, stored=True),
