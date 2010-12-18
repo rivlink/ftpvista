@@ -458,11 +458,6 @@ class CodedOrderedReader(OrderedHashReader):
             yield kd(k)
 
 
-# weight, offset, postcount
-_terminfo_struct0 = Struct("!BIB")
-_terminfo_struct1 = Struct("!fII")
-_terminfo_struct2 = Struct("!fqI")
-
 class TermIndexWriter(CodedOrderedWriter):
     def __init__(self, dbfile):
         super(TermIndexWriter, self).__init__(dbfile)
@@ -485,19 +480,18 @@ class TermIndexWriter(CodedOrderedWriter):
         return key
     
     def valuecoder(self, data):
-        # Encode term info
         w, offset, df = data
-        if offset < _4GB:
-            iw = int(w)
-            if w == 1 and df == 1 :
-                return pack_uint(offset)
-            elif w == iw and w <= 255 and df <= 255:
-                return _terminfo_struct0.pack(iw, offset, df)
-            else:
-                return _terminfo_struct1.pack(w, offset, df)
+        
+        if w == 1 and df == 1:
+            v = dumps((offset, ), -1)
+        elif w == df:
+            v = dumps((offset, df), -1)
         else:
-            return _terminfo_struct2.pack(w, offset, df)
-    
+            v = dumps((w, offset, df), -1)
+            
+        # Strip off protocol at start and stack return command at end
+        return v[2:-1]
+            
     def close(self):
         self._write_hashes()
         dbfile = self.dbfile
@@ -522,20 +516,21 @@ class TermIndexReader(CodedOrderedReader):
             self.names[num] = name
     
     def keycoder(self, key):
-        return pack_ushort(self.fieldmap[key[0]]) + utf8encode(key[1])[0]
+        fieldname, text = key
+        fnum = self.fieldmap.get(fieldname, 65535)
+        return pack_ushort(fnum) + utf8encode(text)[0]
         
     def keydecoder(self, v):
         return (self.names[unpack_ushort(v[:2])[0]], utf8decode(v[2:])[0])
     
     def valuedecoder(self, v):
-        if len(v) == _INT_SIZE:
-            return (1.0, unpack_uint(v)[0], 1)
-        elif len(v) == _terminfo_struct0.size:
-            return _terminfo_struct0.unpack(v)
-        elif len(v) == _terminfo_struct1.size:
-            return _terminfo_struct1.unpack(v)
+        v = loads(v + ".")
+        if len(v) == 1:
+            return (1, v[0], 1)
+        elif len(v) == 2:
+            return (v[1], v[0], v[1])
         else:
-            return _terminfo_struct2.unpack(v)
+            return v
     
 
 # docnum, fieldnum
@@ -655,10 +650,16 @@ class StoredFieldWriter(object):
         f = self.dbfile
         
         name_map = self.name_map
+        
         vlist = [None] * len(name_map)
         for k, v in values.iteritems():
-            vlist[name_map[k]] = v
-        
+            if k in name_map:
+                vlist[name_map[k]] = v
+            else:
+                # For dynamic stored fields, put them at the end of the list
+                # as a tuple of (fieldname, value)
+                vlist.append((k, v))
+                
         v = dumps(vlist, -1)
         self.length += 1
         self.directory += pack_stored_pointer(f.tell(), len(v))
@@ -708,7 +709,17 @@ class StoredFieldReader(object):
         vlist = loads(dbfile.map[position:position+length])
         
         names = self.names
-        return dict((names[i], v) for i, v in enumerate(vlist) if v is not None)
+        # Recreate a dictionary by putting the field names and values back
+        # together by position. We can't just use dict(zip(...)) because we
+        # want to filter out the None values.
+        values = dict((names[i], vlist[i]) for i in xrange(len(names))
+                      if vlist[i] is not None)
+        
+        # Pull out an extra stored dynamic field values off the end of the list
+        if len(vlist) > len(names):
+            values.update(dict(vlist[len(names):]))
+        
+        return values
 
 
 # Utility functions

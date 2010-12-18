@@ -116,6 +116,19 @@ class IndexReader(ClosableMixin):
         """
         raise NotImplementedError
 
+    def all_doc_ids(self):
+        """Returns an iterator of all (undeleted) document IDs in the reader.
+        """
+        
+        # This default implementation works for backends like filedb that use
+        # a continuous 0-N range of numbers to address documents, but will need
+        # to be overridden if a backend, e.g., looks up documents using
+        # persistent ID strings.
+        
+        is_deleted = self.is_deleted
+        return (docnum for docnum in xrange(self.doc_count_all())
+                if not is_deleted(docnum))
+        
     def is_deleted(self, docnum):
         """Returns True if the given document number is marked deleted.
         """
@@ -226,6 +239,28 @@ class IndexReader(ClosableMixin):
         """Returns the maximum length of the field across all documents.
         """
         raise NotImplementedError
+
+    def first_ids(self, fieldname):
+        """Yields a series of (text, docid) tuples for the terms in the given
+        field. This may be optimized in certain backends to be much faster than
+        iterating on the field and reading the first item from each posting
+        list.
+        
+        Taking the first doc ID for each term in a field is often useful when
+        working with fields of unique identifier values, where you know each
+        term should only have one doc ID in the posting list.
+        """
+        
+        for text in self.lexicon(fieldname):
+            yield (text, self.first_id(fieldname, text))
+
+    def first_id(self, fieldname, text):
+        """Returns the first ID in the posting list for the given term. This
+        may be optimized in certain backends.
+        """
+        
+        p = self.postings(fieldname, text)
+        return p.id()
 
     def postings(self, fieldname, text, scorer=None, exclude_docs=None):
         """Returns a :class:`~whoosh.matching.Matcher` for the postings of the
@@ -338,7 +373,7 @@ class EmptyReader(IndexReader):
     def iter_prefix(self, fieldname):
         return iter([])
     
-    def lexicon(self):
+    def lexicon(self, fieldname):
         return iter([])
     
     def has_deletions(self):
@@ -544,16 +579,25 @@ class MultiReader(IndexReader):
     
     # max_field_length
 
+    def first_id(self, fieldname, text):
+        for i, r in enumerate(self.readers):
+            try:
+                id = r.first_id(fieldname, text)
+                return self.doc_offsets[i] + id
+            except (KeyError, TermNotFound):
+                pass
+
     def postings(self, fieldname, text, scorer=None, exclude_docs=None):
         postreaders = []
         docoffsets = []
         for i, r in enumerate(self.readers):
-            format = r.field(fieldname).format
-            if (fieldname, text) in r:
+            try:
                 pr = r.postings(fieldname, text, scorer=scorer,
                                 exclude_docs=exclude_docs)
                 postreaders.append(pr)
                 docoffsets.append(self.doc_offsets[i])
+            except TermNotFound:
+                pass
         
         if not postreaders:
             raise TermNotFound(fieldname, text)

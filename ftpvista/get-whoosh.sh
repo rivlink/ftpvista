@@ -9,4 +9,4 @@ if [[ -e whoosh ]]; then
   exit 42
 fi
 
-hg clone http://bitbucket.org/mchaput/whoosh whoosh
+hg clone http://bitbucket.org/mchaput/whoosh whoosh.git

@@ -28,7 +28,7 @@ from whoosh.store import Storage, LockError
 from whoosh.system import _INT_SIZE, _FLOAT_SIZE, _LONG_SIZE
 
 
-_INDEX_VERSION = -109
+_INDEX_VERSION = -110
 
 
 # TOC read/write functions
@@ -120,7 +120,8 @@ def _read_toc(storage, schema, indexname):
     def check_size(name, target):
         sz = stream.read_varint()
         if sz != target:
-            raise IndexError("Index was created on different architecture: saved %s = %s, this computer = %s" % (name, sz, target))
+            raise IndexError("Index was created on different architecture:"
+                             " saved %s = %s, this computer = %s" % (name, sz, target))
 
     check_size("int", _INT_SIZE)
     check_size("long", _LONG_SIZE)

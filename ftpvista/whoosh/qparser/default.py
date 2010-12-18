@@ -30,9 +30,14 @@ class QueryParserError(Exception):
         self.cause = cause
 
 
+def rcompile(pattern, flags=0):
+    if not isinstance(pattern, basestring):
+        # If it's not a string, assume it's already a compiled pattern
+        return pattern
+    return re.compile(pattern, re.UNICODE | flags)
 
 ws = "[ \t\r\n]+"
-wsexpr = re.compile(ws)
+wsexpr = rcompile(ws)
 
 
 class SyntaxObject(object):
@@ -226,7 +231,7 @@ class Singleton(Token):
 
 
 class White(Singleton):
-    expr = re.compile("[ \t\r\n]+")
+    expr = rcompile("\\s+")
     
 
 class ErrorToken(Token):
@@ -316,7 +321,7 @@ class Word(BasicSyntax):
     """Syntax object representing a term.
     """
     
-    expr = re.compile("[^ \t\r\n)]+")
+    expr = rcompile("[^ \t\r\n)]+")
     tokenize = True
     removestops = True
     
@@ -348,6 +353,8 @@ class Plugin(object):
 class RangePlugin(Plugin):
     """Adds the ability to specify term ranges.
     
+    This plugin has no configuration.
+    
     This plugin is included in the default parser configuration.
     """
     
@@ -355,7 +362,7 @@ class RangePlugin(Plugin):
         return ((RangePlugin.Range, 1), )
     
     class Range(Token):
-        expr = re.compile(r"""
+        expr = rcompile(r"""
         (?P<open>\{|\[)               # Open paren
         
         (                             # Begin optional "start"
@@ -375,9 +382,7 @@ class RangePlugin(Plugin):
         )?                            # End of optional "end
         
         (?P<close>\}|\])              # Close paren
-        """, re.UNICODE | re.VERBOSE)
-        
-        #expr = re.compile("(\\{|\\[)((?P<start>.*?) )?TO( (?P<end>[^\\]}]))?(\\}|\\])", re.UNICODE)
+        """, re.VERBOSE)
         
         def __init__(self, start, end, startexcl, endexcl, fieldname=None, boost=1.0):
             self.fieldname = fieldname
@@ -447,6 +452,8 @@ class RangePlugin(Plugin):
 class PhrasePlugin(Plugin):
     """Adds the ability to specify phrase queries inside double quotes.
     
+    This plugin has no configuration.
+    
     This plugin is included in the default parser configuration.
     """
     
@@ -454,7 +461,7 @@ class PhrasePlugin(Plugin):
         return ((PhrasePlugin.Quotes, 0), )
     
     class Quotes(BasicSyntax):
-        expr = re.compile('"([^"]*?)("|$)')
+        expr = rcompile('"(.*?)"')
         
         def __init__(self, text, fieldname=None, boost=1.0, slop=1):
             super(PhrasePlugin.Quotes, self).__init__(text, fieldname=fieldname,
@@ -481,10 +488,10 @@ class PhrasePlugin(Plugin):
             fieldname = self.fieldname or parser.fieldname
             if parser.schema and fieldname in parser.schema:
                 field = parser.schema[fieldname]
-                if field.self_parsing():
-                    return field.parse_query(fieldname, self.text, boost=self.boost)
-                else:
-                    words = list(field.process_text(self.text, mode="query")) 
+                #if field.self_parsing():
+                #    return field.parse_query(fieldname, self.text, boost=self.boost)
+                #else:
+                words = list(field.process_text(self.text, mode="query")) 
             else:
                 words = self.text.split(" ")
             
@@ -496,6 +503,8 @@ class SingleQuotesPlugin(Plugin):
     """Adds the ability to specify single "terms" containing spaces by
     enclosing them in single quotes.
     
+    This plugin has no configuration.
+    
     This plugin is included in the default parser configuration.
     """
      
@@ -503,11 +512,11 @@ class SingleQuotesPlugin(Plugin):
         return ((SingleQuotesPlugin.SingleQuotes, 0), )
     
     class SingleQuotes(Token):
-        expr = re.compile(r"'([^']*?)'(?=\s|\]|[)}]|$)")
+        expr = rcompile(r"(^|(?<=\W))'(.*?)'(?=\s|\]|[)}]|$)")
         
         @classmethod
         def create(cls, parser, match):
-            return Word(match.group(1))
+            return Word(match.group(2))
 
 
 class PrefixPlugin(Plugin):
@@ -521,7 +530,7 @@ class PrefixPlugin(Plugin):
         return ((PrefixPlugin.Prefix, 0), )
     
     class Prefix(BasicSyntax):
-        expr = re.compile("[^ \t\r\n*]+\\*(?= |$|\\))")
+        expr = rcompile("[^ \t\r\n*]+\\*(?= |$|\\))")
         qclass = query.Prefix
         
         def __repr__(self):
@@ -532,7 +541,7 @@ class PrefixPlugin(Plugin):
         
         @classmethod
         def create(cls, parser, match):
-            return cls(match.group(0))
+            return cls(match.group(0)[:-1])
         
 
 class WildcardPlugin(Plugin):
@@ -548,7 +557,10 @@ class WildcardPlugin(Plugin):
         return ((WildcardPlugin.Wild, 1), )
     
     class Wild(BasicSyntax):
-        expr = re.compile("[^ \t\r\n*?]*(\\*|\\?)\\S*")
+        # \u055E = Armenian question mark
+        # \u061F = Arabic question mark
+        # \u1367 = Ethiopic question mark
+        expr = rcompile(u"[^ \t\r\n*?\u055E\u061F\u1367]*[*?\u055E\u061F\u1367]\\S*")
         qclass = query.Wildcard
         
         def __repr__(self):
@@ -562,17 +574,6 @@ class WildcardPlugin(Plugin):
             return cls(match.group(0))
         
 
-class WordPlugin(Plugin):
-    """Adds the ability to query for individual terms. You should always
-    include this plugin.
-    
-    This plugin is always automatically included by the QueryParser.
-    """
-    
-    def tokens(self, parser):
-        return ((Word, 900), )
-
-
 class WhitespacePlugin(Plugin):
     """Parses whitespace between words in the query string. You should always
     include this plugin.
@@ -580,19 +581,21 @@ class WhitespacePlugin(Plugin):
     This plugin is always automatically included by the QueryParser.
     """
     
+    def __init__(self, tokenclass=White):
+        self.tokenclass = tokenclass
+    
     def tokens(self, parser):
-        return ((White, 100), )
+        return ((self.tokenclass, 100), )
     
     def filters(self, parser):
-        return ((WhitespacePlugin.do_whitespace, 500), )
+        return ((self.do_whitespace, 500), )
     
-    @staticmethod
-    def do_whitespace(parser, stream):
+    def do_whitespace(self, parser, stream):
         newstream = stream.empty()
         for t in stream:
             if isinstance(t, Group):
-                newstream.append(WhitespacePlugin.do_whitespace(parser, t))
-            elif not isinstance(t, White):
+                newstream.append(self.do_whitespace(parser, t))
+            elif not isinstance(t, self.tokenclass):
                 newstream.append(t)
         return newstream
 
@@ -633,10 +636,10 @@ class GroupPlugin(Plugin):
         return top
     
     class Open(Singleton):
-        expr = re.compile("\\(")
+        expr = rcompile("\\(")
         
     class Close(Singleton):
-        expr = re.compile("\\)")
+        expr = rcompile("\\)")
 
 
 class FieldsPlugin(Plugin):
@@ -678,7 +681,7 @@ class FieldsPlugin(Plugin):
         return newstream
     
     class Field(Token):
-        expr = re.compile("([A-Za-z][A-Za-z_0-9]*):(?!=(\\s|$))")
+        expr = rcompile(u"(\w[\w\d]*):")
         
         def __init__(self, fieldname):
             self.fieldname = fieldname
@@ -700,72 +703,94 @@ class CompoundsPlugin(Plugin):
     """Adds the ability to use AND, OR, ANDMAYBE, and ANDNOT to specify
     query constraints.
     
+    You can customize the tokens by passing regular expressions to the ``And``,
+    ``Or``, ``AndNot``, and/or ``AndMaybe`` keywords to the class initializer::
+    
+        qp = qparser.QueryParser("content")
+        
+        cp = qparser.CompoundsPlugin(And="&", Or="\\|", AndNot="&!", AndMaybe="&~")
+        qp.replace_plugin(cp)
+    
     This plugin is included in the default parser configuration.
     """
     
+    def __init__(self, And=r"\sAND\s", Or=r"\sOR\s", AndNot=r"\sANDNOT\s",
+                 AndMaybe=r"\sANDMAYBE\s"):
+        # Create one-off token classes using the keyword arguments
+        class AndTokenClass(Singleton):
+            expr = rcompile(And)
+        class OrTokenClass(Singleton):
+            expr = rcompile(Or)
+        class AndNotTokenClass(Singleton):
+            expr = rcompile(AndNot)
+        class AndMaybeTokenClass(Singleton):
+            expr = rcompile(AndMaybe)
+            
+        # Store these classes as attributes
+        self.And = AndTokenClass
+        self.Or = OrTokenClass
+        self.AndNot = AndNotTokenClass
+        self.AndMaybe = AndMaybeTokenClass
+    
     def tokens(self, parser):
-        return ((CompoundsPlugin.AndNot, -10), (CompoundsPlugin.And, 0),
-                (CompoundsPlugin.Or, 0))
+        return ((self.AndNot, -10), (self.AndMaybe, -5), (self.And, 0),
+                (self.Or, 0))
     
     def filters(self, parser):
-        return ((CompoundsPlugin.do_compounds, 600), )
+        return ((self.do_compounds, 600), )
 
-    @staticmethod
-    def do_compounds(parser, stream):
+    def do_compounds(self, parser, stream):
         newstream = stream.empty()
         i = 0
         while i < len(stream):
+            # The current token
             t = stream[i]
+            
+            # Whether this token has other tokens in front and behind; that is,
+            # if ismiddle is True, this is not the first or last token
             ismiddle = newstream and i < len(stream) - 1
+            
             if isinstance(t, Group):
-                newstream.append(CompoundsPlugin.do_compounds(parser, t))
-            elif isinstance(t, (CompoundsPlugin.And, CompoundsPlugin.Or)):
-                if isinstance(t, CompoundsPlugin.And):
+                # The current token is a group: recursively apply this plugin
+                # to the group
+                newstream.append(self.do_compounds(parser, t))
+                
+            elif isinstance(t, (self.And, self.Or)):
+                # This is either an And or Or token. Create a new Group class
+                # of the appropriate type
+                if isinstance(t, self.And):
                     cls = AndGroup
                 else:
                     cls = OrGroup
                 
                 if cls != type(newstream) and ismiddle:
                     last = newstream.pop()
-                    rest = CompoundsPlugin.do_compounds(parser, cls(stream[i+1:]))
+                    rest = self.do_compounds(parser, cls(stream[i+1:]))
                     newstream.append(cls([last, rest]))
                     break
             
-            elif isinstance(t, CompoundsPlugin.AndNot):
-                if ismiddle:
-                    last = newstream.pop()
-                    i += 1
-                    next = stream[i]
-                    if isinstance(next, Group):
-                        next = CompoundsPlugin.do_compounds(parser, next)
-                    newstream.append(AndNotGroup([last, next]))
+            elif isinstance(t, (self.AndNot, self.AndMaybe)) and ismiddle:
+                # This is either an AndNot or AndMaybe token. Create a new
+                # Group class of the appropriate type
+                if isinstance(t, self.AndNot):
+                    cls = AndNotGroup
+                else:
+                    cls = AndMaybeGroup
+                
+                last = newstream.pop()
+                i += 1
+                next = stream[i]
+                if isinstance(next, Group):
+                    next = self.do_compounds(parser, next)
+                newstream.append(cls([last, next]))
             
-            elif isinstance(t, CompoundsPlugin.AndMaybe):
-                if ismiddle:
-                    last = newstream.pop()
-                    i += 1
-                    next = stream[i]
-                    if isinstance(next, Group):
-                        next = CompoundsPlugin.do_compounds(parser, next)
-                    newstream.append(AndMaybeGroup([last, next]))
             else:
                 newstream.append(t)
+            
             i += 1
         
         return newstream
-    
-    class And(Singleton):
-        expr = re.compile("AND")
-        
-    class Or(Singleton):
-        expr = re.compile("OR")
-        
-    class AndNot(Singleton):
-        expr = re.compile("ANDNOT")
-        
-    class AndMaybe(Singleton):
-        expr = re.compile("ANDMAYBE")
-        
+
 
 class BoostPlugin(Plugin):
     """Adds the ability to boost clauses of the query using the circumflex.
@@ -792,28 +817,22 @@ class BoostPlugin(Plugin):
     @staticmethod
     def do_boost(parser, stream):
         newstream = stream.empty()
+        
         for t in stream:
             if isinstance(t, Group):
                 newstream.append(BoostPlugin.do_boost(parser, t))
+                
             elif isinstance(t, BoostPlugin.Boost):
                 if newstream:
                     newstream.append(newstream.pop().set_boost(t.boost))
-            elif isinstance(t, BasicSyntax) and hasattr(t, "text") and "^" in t.text:
-                carat = t.text.find("^")
-                if carat > 0:
-                    try:
-                        boost = float(t.text[carat+1:])
-                        t = t.set_boost(boost)
-                        t.text = t.text[:carat]
-                    except ValueError:
-                        pass
-                newstream.append(t)
+                
             else:
                 newstream.append(t)
+        
         return newstream
     
     class Boost(Token):
-        expr = re.compile("\\^([0-9]+(.[0-9]+)?)")
+        expr = rcompile("\\^([0-9]+(.[0-9]+)?)($|(?=[ \t\r\n]))")
         
         def __init__(self, original, boost):
             self.original = original
@@ -833,62 +852,51 @@ class BoostPlugin(Plugin):
 class NotPlugin(Plugin):
     """Adds the ability to negate a clause by preceding it with NOT.
     
+    You can customize the token by passing a regular expression to the class
+    initializer::
+    
+        qp = qparser.QueryParser("content")
+        
+        # Use - as the not token
+        qp.replace_plugin(qparser.NotPlugin("(^|(?<= ))-"))
+        
+        # Use ! as the not token
+        qp.replace_plugin(qparser.NotPlugin("(^|(?<= ))!"))
+    
     This plugin is included in the default parser configuration.
     """
     
+    def __init__(self, token="(^|(?<= ))NOT "):
+        class Not(Singleton):
+            expr = rcompile(token)
+        
+        self.Not = Not
+    
     def tokens(self, parser):
-        return ((NotPlugin.Not, 0), )
+        return ((self.Not, 0), )
     
     def filters(self, parser):
-        return ((NotPlugin.do_not, 800), )
+        return ((self.do_not, 800), )
     
-    @staticmethod
-    def do_not(parser, stream):
+    def do_not(self, parser, stream):
         newstream = stream.empty()
         notnext = False
         for t in stream:
-            if isinstance(t, NotPlugin.Not):
+            if isinstance(t, self.Not):
                 notnext = True
                 continue
             
+            if isinstance(t, Group):
+                t = self.do_not(parser, t)
+            
             if notnext:
                 t = NotGroup([t])
+            
             newstream.append(t)
             notnext = False
             
         return newstream
     
-    class Not(Singleton):
-        expr = re.compile("NOT")
-    
-
-class MinusNotPlugin(Plugin):
-    """Adds the ability to prefix a clause with - to negate it. Users may
-    prefer this to using ``NOT``.
-    """
-    
-    def tokens(self, parser):
-        return ((PlusMinusPlugin.Minus, 0), )
-    
-    def filters(self, parser):
-        return ((MinusNotPlugin.do_minus, 510), )
-    
-    @staticmethod
-    def do_minus(parser, stream):
-        newstream =  stream.empty()
-        notnext = False
-        for t in stream:
-            if isinstance(t, PlusMinusPlugin.Minus):
-                notnext = True
-            else:
-                if isinstance(t, Group):
-                    t = MinusNotPlugin.do_minus(parser, t)
-                if notnext:
-                    t = NotGroup([t])
-                newstream.append(t)
-                notnext = False
-        return newstream
-                
 
 class PlusMinusPlugin(Plugin):
     """Adds the ability to use + and - in a flat OR query to specify required
@@ -928,10 +936,10 @@ class PlusMinusPlugin(Plugin):
         return r
     
     class Plus(Singleton):
-        expr = re.compile("\\+")
+        expr = rcompile("\\+")
         
     class Minus(Singleton):
-        expr = re.compile("-")
+        expr = rcompile("-")
 
 
 class MultifieldPlugin(Plugin):
@@ -1063,10 +1071,10 @@ class QueryParser(object):
             is :class:`whoosh.query.Phrase`.
         :param group: the default grouping. ``AndGroup`` makes terms required
             by default. ``OrGroup`` makes terms optional by default.
-        :param plugins: a list of plugins to use. WordPlugin and
-            WhitespacePlugin are automatically included, do not put them in
-            this list. This overrides the default list of plugins. Classes
-            in the list will be automatically instantiated.
+        :param plugins: a list of plugins to use. WhitespacePlugin is
+            automatically included, do not put it in this list. This overrides
+            the default list of plugins. Classes in the list will be
+            automatically instantiated.
         """
         
         self.fieldname = fieldname
@@ -1077,7 +1085,7 @@ class QueryParser(object):
         
         if not plugins:
             plugins = full_profile
-        plugins = list(plugins) + [WhitespacePlugin, WordPlugin]
+        plugins = list(plugins) + [WhitespacePlugin]
         for i, plugin in enumerate(plugins):
             if isinstance(plugin, type):
                 try:
@@ -1105,6 +1113,19 @@ class QueryParser(object):
         """
         
         self.plugins = [p for p in self.plugins if not isinstance(p, cls)]
+    
+    def replace_plugin(self, plugin):
+        """Removes any plugins of the class of the given plugin and then adds
+        it. This is a convenience method to keep from having to call
+        ``remove_plugin_class`` followed by ``add_plugin`` each time you want
+        to reconfigure a default plugin.
+        
+        >>> qp = qparser.QueryParser("content")
+        >>> qp.replace_plugin(qparser.NotPlugin("(^| )-"))
+        """
+        
+        self.remove_plugin_class(plugin.__class__)
+        self.add_plugin(plugin)
     
     def get_plugin(self, cls, derived=True):
         for plugin in self.plugins:
@@ -1147,7 +1168,11 @@ class QueryParser(object):
         :rtype: :class:`whoosh.query.Query`
         """
         
-        stream = self._tokenize(text)
+        if debug:
+            print "Tokenizing %r" % text
+        stream = self._tokenize(text, debug=debug)
+        if debug:
+            print "Stream=", stream
         stream = self._filterize(stream, debug)
         
         q = stream.query(self)
@@ -1157,7 +1182,7 @@ class QueryParser(object):
             q = q.normalize()
         return q
     
-    def _tokenize(self, text):
+    def _tokenize(self, text, debug=False):
         stack = []
         i = 0
         prev = 0
@@ -1166,28 +1191,43 @@ class QueryParser(object):
         while i < len(text):
             matched = False
             
+            if debug: print ".matching at %r" % text[i:]
             for tk in tokens:
+                if debug: print "..trying token %r" % tk
                 m = tk.match(text, i)
                 if m:
                     item = tk.create(self, m)
+                    if debug:
+                        print "...matched %r item %r" % (m.group(0), item)
+                    
                     if item:
-                        stack.append(item)
                         if item.endpos is not None:
                             newpos = item.endpos
                         else:
                             newpos = m.end()
+                            
+                        if newpos <= i:
+                            raise Exception("Parser element %r did not move the cursor forward (pos=%s match=%r)" % (tk, i, m.group(0)))
                         
+                        if prev < i:
+                            if debug:  print "...Adding in-between %r as a term" % text[prev:i]
+                            stack.append(Word(text[prev:i]))
+                        
+                        stack.append(item)
                         prev = i = newpos
                         matched = True
                         break
+            
+            if debug:
+                print ".stack is now %r" % (stack, )
             
             if not matched:
                 i += 1
         
         if prev < len(text):
-            stack.append((Word, text[prev:]))
+            stack.append(Word(text[prev:]))
         
-        #print "stack=", stack
+        if debug: print "Final stack %r" % (stack, )
         return self.group(stack)
     
     def _filterize(self, stream, debug=False):
@@ -1253,7 +1293,6 @@ def DisMaxParser(fieldboosts, schema=None, tiebreak=0.0, **kwargs):
     dmpi = DisMaxPlugin(fieldboosts, tiebreak)
     return QueryParser(None, schema=schema,
                        plugins=(PlusMinusPlugin, PhrasePlugin, dmpi), **kwargs)
-    
     
 
 
