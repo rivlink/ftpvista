@@ -58,23 +58,17 @@ SECRET_KEY = 'ij7uar@iiuigz6veal@eadw#1&0@0idrt_ywy7#31-#@p(s)*l'
 # List of callables that know how to import templates from various sources.
 TEMPLATE_LOADERS = (
     'django.template.loaders.filesystem.load_template_source',
-    'django.template.loaders.app_directories.load_template_source',
-#     'django.template.loaders.eggs.load_template_source',
+    'django.template.loaders.app_directories.load_template_source'
 )
 
 MIDDLEWARE_CLASSES = (
-    'django.middleware.common.CommonMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.middleware.common.CommonMiddleware'
 )
 
 ROOT_URLCONF = 'magnesite.urls'
 
 TEMPLATE_DIRS = (
     "/home/ftpvista/ftpvista3/magnesite/templates"
-    # Put strings here, like "/home/html/django_templates" or "C:/www/django/templates".
-    # Always use forward slashes, even on Windows.
-    # Don't forget to use absolute paths, not relative paths.
 )
 
 INSTALLED_APPS = (
