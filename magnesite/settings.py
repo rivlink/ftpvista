@@ -61,6 +61,10 @@ TEMPLATE_LOADERS = (
     'django.template.loaders.app_directories.load_template_source'
 )
 
+SESSION_ENGINE = (
+    'django.contrib.sessions.backends.file'
+)
+
 MIDDLEWARE_CLASSES = (
     'django.middleware.common.CommonMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware'
