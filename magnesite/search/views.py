@@ -61,7 +61,9 @@ def index(request):
                                              'servers' : servers,
                                              'sTrId': u'node-',
                                              'servers': models.get_servers(),
-                                             'aFilterFileTypes': SearchFilterFileTypes.getFileTypes()})
+                                             'aFilterFileTypes': SearchFilterFileTypes.getFileTypes(),
+                                             'nb_files': models.get_nb_files(),
+                                             'files_size': models.get_files_size()})
 
 
 def search(request):
@@ -103,7 +105,9 @@ def search(request):
                                              'aFileNodes': filteredFileNodes,
                                              'sTrId': u'node-',
                                              'servers': models.get_servers(),
-                                             'aFilterFileTypes': SearchFilterFileTypes.getFileTypes()})
+                                             'aFilterFileTypes': SearchFilterFileTypes.getFileTypes(),
+                                             'nb_files': models.get_nb_files(),
+                                             'files_size': models.get_files_size()})
 
 
 def search_results(request):

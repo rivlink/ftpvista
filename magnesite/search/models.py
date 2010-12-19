@@ -72,6 +72,17 @@ def search(query, limit=1000):
         else:
             yield FileNode(server_ip, hit['url'], hit['name'], hit['mtime'], hit['size'], hit['is_online'])
 
+def get_nb_files():
+    nb_files = 0
+    for server in persist.get_servers():
+        nb_files += server.get_nb_files()
+    return nb_files
+    
+def get_files_size():
+    files_size = 0
+    for server in persist.get_servers():
+        files_size += server.get_files_size()
+    return files_size
 
 def get_servers():
     return persist.get_servers()
