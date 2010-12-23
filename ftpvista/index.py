@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 
 import logging
 import os, os.path
@@ -219,18 +219,24 @@ class FetchID3TagsStage (pipeline.Stage):
 
             # Fetch the data from the server
             self._fetch_data(path.encode('utf-8'))
-
+            id3_map = {}
             # Look for tags
             try:
                 id3r = id3reader.Reader(self._buffer)
-                for tag in ['album', 'performer', 'title', 'track', 'year']:
+                for tag in ['album', 'performer', 'title', 'track', 'year', 'genre']:
                     value = to_unicode(id3r.getValue(tag))
-                    if value:
+                    id3_map[tag] = None
+                    if value is not None:
+                        id3_map[tag] = value
                         # add the tag in the context object
                         context.set_extra_data('audio_%s' % tag, value)
 
             except (id3reader.Id3Error, UnicodeDecodeError), e:
                 self.log.error('%s : %r' % (path, e))
+            
+            # Il faut récupérer d'autres informations !
+            # Et linker persist !!
+            self.persist.add_track(id3_map['title'], path, id3_map['performer'], id3_map['genre'], id3_map['album'], year=id3_map['year'], trackno=id3_map['track']):
 
         # Whatever the outcome of this stage,
         # continue the execution of the pipeline
