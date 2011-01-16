@@ -244,7 +244,7 @@ class FetchID3TagsStage (pipeline.Stage):
                     self.log.error('%s : %r' % (path, e))
                 
                 #TODO: Il faut récupérer d'autres informations !
-                self._persist.add_track(id3_map['title'], str('ftp://%s%s' % (self._server_addr, pathname2url(path.encode('utf-8')))), id3_map['performer'], id3_map['genre'], id3_map['album'], year=id3_map['year'], trackno=id3_map['track'])
+                self._persist.add_track(id3_map['title'], unicode('ftp://%s%s' % (self._server_addr, pathname2url(path.encode('utf-8')))), id3_map['performer'], id3_map['genre'], id3_map['album'], year=id3_map['year'], trackno=id3_map['track'])
 
         # Whatever the outcome of this stage,
         # continue the execution of the pipeline
