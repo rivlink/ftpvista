@@ -100,7 +100,8 @@ def main_daemonized(config):
 
     # Create the DB to store informations about the FTP servers
     db_uri = config.get('db', 'uri')
-    persist = ftpvista_persist.FTPVistaPersist(db_uri)
+    rivplayer_uri = config.get('db', 'rivplayer_uri')
+    persist = ftpvista_persist.FTPVistaPersist(db_uri, rivplayer_uri)
     persist.initialize_store()
 
     # Full-text index for storing terms from the files found on the servers
@@ -168,20 +169,22 @@ def main(options):
         context.open()
     
     if options.only_check_online:
-        create_pid_file(config.get('online_checker', 'pid'))
-        flock = lockfile.FileLock(config.get('online_checker', 'pid'))
-        if flock.is_locked():
-            print ("Already launched ... exiting")
-            sys.exit(3)
-        flock.acquire()
+        if options.daemon:
+            create_pid_file(config.get('online_checker', 'pid'))
+            flock = lockfile.FileLock(config.get('online_checker', 'pid'))
+            if flock.is_locked():
+                print ("Already launched ... exiting")
+                sys.exit(3)
+            flock.acquire()
         check_online(config)
     else:
-        create_pid_file(config.get('indexer', 'pid'))
-        flock = lockfile.FileLock(config.get('indexer', 'pid'))
-        if flock.is_locked():
-            print ("Already launched ... exiting")
-            sys.exit(2)
-        flock.acquire()
+        if options.daemon:
+            create_pid_file(config.get('indexer', 'pid'))
+            flock = lockfile.FileLock(config.get('indexer', 'pid'))
+            if flock.is_locked():
+                print ("Already launched ... exiting")
+                sys.exit(2)
+            flock.acquire()
         main_daemonized(config)
 
 if __name__ == '__main__':

@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 import logging
 from datetime import datetime, timedelta
@@ -8,6 +8,12 @@ import sqlalchemy
 from sqlalchemy import *
 from sqlalchemy.orm import mapper, sessionmaker, relationship, backref
 from sqlalchemy.orm.exc import NoResultFound
+from sqlalchemy.exc import ArgumentError
+from sqlalchemy.ext.declarative import declarative_base
+from os import path
+import re
+import id3reader
+from urllib import url2pathname
 
 from utils import Servers
 import nmap_scanner
@@ -17,43 +23,6 @@ def never_date():
 
     This value is used as 'Never'."""
     return datetime.fromtimestamp(0)
-
-def build_player_tables(meta):
-    artist = Table(
-        'artist', meta,
-        Column('id', Integer, primarey_key=True),
-        Column('name', String(100), nullable=False, unique=True),
-        mysql_engine='InnoDB'
-    )
-    album = Table(
-        'album', meta,
-        Column('id', Integer, primarey_key=True),
-        Column('artist_id', Integer, ForeignKey("artist.id"), nullable=False),
-        Column('name', String(100), nullable=False),
-        mysql_engine='InnoDB'
-    )
-    genre = Table(
-        'genre', meta,
-        Column('id', Integer, primarey_key=True),
-        Column('name', String(100), nullable=False, unique=True),
-        mysql_engine='InnoDB'
-    )
-    track = Table(
-        'track', meta,
-        Column('id', Integer, primarey_key=True),
-        Column('uripath', String(255), nullable=False),
-        Column('genre_id', Integer, ForeignKey("genre.id")),
-        Column('album_id', Integer, ForeignKey("album.id")),
-        Column('name', String(100), unique=True, nullable=False),
-        Column('duration', Integer),
-        Column('year', Integer),
-        Column('bitrate', String(10)),
-        Column('frequency', String(10)),
-        Column('lyrics', sqlalchemy.dialects.mysql.base.TEXT),
-        Column('trackno', Integer),
-        mysql_engine='InnoDB'
-    )
-    return artist, album, genre, track
 
 def build_tables(meta):
     ftpservers = Table(
@@ -68,22 +37,56 @@ def build_tables(meta):
         )
     return ftpservers
 
-class Artist:
+Base = declarative_base()
+
+class Artist(Base):
+    __tablename__ = 'artist'
+    __table_args__ = {'mysql_engine':'InnoDB'}
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String(254), nullable=False, unique=True)
+    
     def __init__(self, name):
         self.name = name
 
-class Album:
-
+class Album(Base):
+    __tablename__ = 'album'
+    __table_args__ = {'mysql_engine':'InnoDB'}
+    
+    id = Column(Integer, primary_key=True)
+    artist_id = Column(Integer, ForeignKey("artist.id"), nullable=False)
+    name = Column(String(254), nullable=False)
+    
     def __init__(self, name, artist_id):
         self.name = name
         self.artist_id = artist_id
 
-class Genre:
+class Genre(Base):
+    __tablename__ = 'genre'
+    __table_args__ = {'mysql_engine':'InnoDB'}
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String(254), nullable=False, unique=True)
+    
     def __init__(self, name):
         self.name = name
 
-class Track:
-
+class Track(Base):
+    __tablename__ = 'track'
+    __table_args__ = {'mysql_engine':'InnoDB'}
+    
+    id = Column(Integer, primary_key=True)
+    uripath = Column(String(254), nullable=False)
+    genre_id = Column(Integer, ForeignKey("genre.id"))
+    album_id = Column(Integer, ForeignKey("album.id"))
+    name = Column(String(254), nullable=False)
+    duration = Column(Integer)
+    year = Column(Integer)
+    bitrate = Column(String(10))
+    frequency = Column(String(10))
+    lyrics = Column(sqlalchemy.types.Text)
+    trackno = Column(Integer)
+    
     def __init__(self, name, uripath, genre_id, album_id, duration=0, year=0, bitrate='', frequency='', lyrics='', trackno=''):
         self.name = name
         self.uripath = uripath
@@ -96,10 +99,10 @@ class Track:
         self.lyrics = lyrics
         self.trackno = trackno
 
-    def get_genre_id(name):
+#    def get_genre_id(name):
 
 
-    def get_album_id(name, artist):
+#    def get_album_id(name, artist):
 
 
 class FTPServer (object):
@@ -156,10 +159,10 @@ class FTPServer (object):
 
 class FTPVistaPersist(object):
     def __init__(self, db_uri, rivplayer_uri):
+        self.log = logging.getLogger('ftpvista.persist')
         self.engine = create_engine(db_uri)
         self.engine_player = create_engine(rivplayer_uri)
         self.meta = MetaData(self.engine)
-        self.meta_player = MetaData(self.engine_player)
 
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
@@ -169,23 +172,56 @@ class FTPVistaPersist(object):
 
         self.servers = build_tables(self.meta)
 
-        self.artist, self.album, self.genre, self.track = build_player_tables(self.meta_player)
-
         try:
             mapper(FTPServer, self.servers)
-            mapper(Artist, self.artist)
-            mapper(Album, self.album)
-            mapper(Genre, self.genre)
-            mapper(Track, self.track)
         except ArgumentError:
             pass
 
     def initialize_store(self):
         self.meta.create_all()
-
+        Base.metadata.create_all(self.engine_player)
+    
+    def _clean_tag(self, tag, allow_none = False, type = 'string', default = None, max_len = 254):
+        if default is None and allow_none is False:
+            if type == 'string':
+                default = 'Inconnu'
+            elif type == 'integer':
+                default = 0
+        if tag is None or tag == 'None':
+            if allow_none is False:
+                return default
+            else:
+                return None
+        tag = unicode(tag).strip()
+        if tag == '':
+            return default
+        if type == 'integer' and re.match('\d{1,32}', tag) is None:
+            return default
+        return tag[:max_len].strip()
+        
+    
     def add_track(self, name, uripath, artist, genre, album, duration=0, year=0, bitrate='', frequency='', lyrics='', trackno=''):
+        name = self._clean_tag(name, default=url2pathname(path.basename(uripath).rsplit('.', 1)[0]))
+        artist = self._clean_tag(artist)
+        genre = self._clean_tag(genre)
+        album = self._clean_tag(album)
+        duration = self._clean_tag(duration, type='integer')
+        year = self._clean_tag(year, type='integer', max_len=4)
+        bitrate = self._clean_tag(bitrate, allow_none=True)
+        frequency = self._clean_tag(frequency, allow_none=True)
+        lyrics = self._clean_tag(lyrics, allow_none=True, max_len=4096)
+        trackno = self._clean_tag(trackno, type='integer')
+        
+        match = re.match('\((\d{1,3})\)', genre)
+        if match is not None:
+            id3v1_genre_id = int(match.group(1))
+            if id3v1_genre_id >=0 and id3v1_genre_id <= 147:
+                genre = id3reader._genres[id3v1_genre_id]
+        
+        self.log.debug(u'Adding Music ! Name : ' + unicode(name) + u' - Path : ' + unicode(uripath) + u' - Artist : ' + unicode(artist) + u' - Genre : ' + unicode(genre) + u' - Album : ' + unicode(album))
+        
         try:
-            artist_id, = self.session_player.Query(Artist.id).filter_by(name=artist).one()
+            artist_id, = self.session_player.query(Artist.id).filter_by(name=artist).one()
         except NoResultFound, e:
             new_artist = Artist(artist)
             self.session_player.add(new_artist)
@@ -193,7 +229,7 @@ class FTPVistaPersist(object):
             artist_id = new_artist.id
 
         try:
-            album_id, = self.session_player.Query(Album.id).filter(name=album).filter(artist_id=artist_id).one()
+            album_id, = self.session_player.query(Album.id).filter_by(name=album).filter_by(artist_id=artist_id).one()
         except NoResultFound, e:
             new_album = Album(album, artist_id)
             self.session_player.add(new_album)
@@ -201,7 +237,7 @@ class FTPVistaPersist(object):
             album_id = new_album.id
 
         try:
-            genre_id, = self.session_player.Query(Genre.id).filter(Genre.name==genre).one()
+            genre_id, = self.session_player.query(Genre.id).filter(Genre.name==genre).one()
         except NoResultFound, e:
             new_genre = Genre(genre)
             self.session_player.add(new_genre)

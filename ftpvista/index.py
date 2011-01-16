@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 import logging
 import os, os.path
@@ -35,7 +35,7 @@ class Index (object):
             self._idx = index.open_dir(dir)
 
         self._searcher = self._idx.searcher()
-        self._writer = BatchWriter(self._idx, 30, 1000)
+        self._writer = self._idx.writer()#BatchWriter(self._idx, 30, 1000)
 
     def get_schema(self):
         analyzer = StemmingAnalyzer('([a-zA-Z0-9])+')
@@ -135,13 +135,14 @@ class Index (object):
 
 
     def commit(self):
-        self._writer = BatchWriter(self._idx, 30, 1000)
+        #self._writer = BatchWriter(self._idx, 30, 1000)
         """ Commit the changes in the index and optimize it """
         self.log.info(' -- Begin of Commit -- ')
         self._writer.commit()
         self._idx.optimize()
         self.log.info('Index commited and optimized')
         
+        self._writer = self._idx.writer()
         self._searcher = self._idx.searcher()
         self.log.info(' -- End of Commit -- ')
         
@@ -176,7 +177,7 @@ class FileIndexerContext (pipeline.Context):
 class FetchID3TagsStage (pipeline.Stage):
     """Pipeline stage to find the ID3 tags of audio files."""
 
-    def __init__(self, server_addr, extensions=['mp3'], fetch_size=2048):
+    def __init__(self, server_addr, persist, extensions=['mp3'], fetch_size=2048):
         """
         :Parameters:
             -`server_addr`: the server IP address
@@ -188,6 +189,7 @@ class FetchID3TagsStage (pipeline.Stage):
                                      server_addr.replace('.', '_'))
         self._server_addr = server_addr
         self._extensions = extensions
+        self._persist = persist
 
         self._buffer = StringIO()
         self._curl = pycurl.Curl()
@@ -202,13 +204,14 @@ class FetchID3TagsStage (pipeline.Stage):
         self._buffer = StringIO()
         self._curl.setopt(pycurl.URL, str('ftp://%s%s' % (self._server_addr,
                                                            pathname2url(path))))
-
         try:
             self._curl.perform()
             self._buffer.seek(0)
+            return True
         except pycurl.error, e:
             errno, msg = e
             self.log.error('%s : %d %s' % (to_unicode(path), errno, msg))
+            return False
 
     def execute(self, context):
         path = context.get_path()
@@ -218,25 +221,30 @@ class FetchID3TagsStage (pipeline.Stage):
             self.log.debug('Trying to get ID3 data for %s' % path)
 
             # Fetch the data from the server
-            self._fetch_data(path.encode('utf-8'))
-            id3_map = {}
-            # Look for tags
-            try:
-                id3r = id3reader.Reader(self._buffer)
-                for tag in ['album', 'performer', 'title', 'track', 'year', 'genre']:
-                    value = to_unicode(id3r.getValue(tag))
-                    id3_map[tag] = None
-                    if value is not None:
-                        id3_map[tag] = value
-                        # add the tag in the context object
-                        context.set_extra_data('audio_%s' % tag, value)
-
-            except (id3reader.Id3Error, UnicodeDecodeError), e:
-                self.log.error('%s : %r' % (path, e))
-            
-            # Il faut récupérer d'autres informations !
-            # Et linker persist !!
-            self.persist.add_track(id3_map['title'], path, id3_map['performer'], id3_map['genre'], id3_map['album'], year=id3_map['year'], trackno=id3_map['track']):
+            if self._fetch_data(path.encode('utf-8')):
+                id3_map = {
+                    'album': None,
+                    'performer': None,
+                    'title': None,
+                    'track': None,
+                    'year': None,
+                    'genre': None
+                }
+                # Look for tags
+                try:
+                    id3r = id3reader.Reader(self._buffer)
+                    for tag in ['album', 'performer', 'title', 'track', 'year', 'genre']:
+                        value = to_unicode(id3r.getValue(tag))
+                        if value is not None:
+                            id3_map[tag] = value
+                            # add the tag in the context object
+                            context.set_extra_data('audio_%s' % tag, value)
+    
+                except (id3reader.Id3Error, UnicodeDecodeError), e:
+                    self.log.error('%s : %r' % (path, e))
+                
+                #TODO: Il faut récupérer d'autres informations !
+                self._persist.add_track(id3_map['title'], str('ftp://%s%s' % (self._server_addr, pathname2url(path.encode('utf-8')))), id3_map['performer'], id3_map['genre'], id3_map['album'], year=id3_map['year'], trackno=id3_map['track'])
 
         # Whatever the outcome of this stage,
         # continue the execution of the pipeline
@@ -276,10 +284,10 @@ class WriteDataStage (pipeline.Stage):
         return True
 
 
-def build_indexer_pipeline(server_id, server_addr, index):
+def build_indexer_pipeline(server_id, server_addr, index, persist):
     """Helper function to make a basic indexing pipeline"""
     pipe = pipeline.Pipeline()
-    pipe.append_stage(FetchID3TagsStage(server_addr))
+    pipe.append_stage(FetchID3TagsStage(server_addr, persist))
     pipe.append_stage(WriteDataStage(server_addr, server_id, index))
 
     return pipe
@@ -343,7 +351,7 @@ class IndexUpdateCoordinator(object):
         files = sorted(files, key=lambda file: file[0])
 
         # Index the files
-        pipeline = build_indexer_pipeline(server_id, server_addr, self._index)
+        pipeline = build_indexer_pipeline(server_id, server_addr, self._index, self._persist)
         for path, size, mtime in files:
             ctx = FileIndexerContext(path, size, mtime)
             pipeline.execute(ctx)
