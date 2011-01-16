@@ -158,11 +158,14 @@ class FTPServer (object):
         return "offline"
 
 class FTPVistaPersist(object):
-    def __init__(self, db_uri, rivplayer_uri):
+    def __init__(self, db_uri, rivplayer_uri = None):
         self.log = logging.getLogger('ftpvista.persist')
         self.engine = create_engine(db_uri)
-        self.engine_player = create_engine(rivplayer_uri)
         self.meta = MetaData(self.engine)
+        if rivplayer_uri is not None:
+            self.engine_player = create_engine(rivplayer_uri)
+        else:
+            self.engine_player = None
 
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
@@ -179,7 +182,8 @@ class FTPVistaPersist(object):
 
     def initialize_store(self):
         self.meta.create_all()
-        Base.metadata.create_all(self.engine_player)
+        if self.engine_player is not None:
+            Base.metadata.create_all(self.engine_player)
     
     def _clean_tag(self, tag, allow_none = False, type = 'string', default = None, max_len = 254):
         if default is None and allow_none is False:
