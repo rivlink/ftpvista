@@ -80,12 +80,12 @@ class Track(Base):
     genre_id = Column(Integer, ForeignKey("genre.id"))
     album_id = Column(Integer, ForeignKey("album.id"))
     name = Column(String(254), nullable=False)
-    duration = Column(Integer)
-    year = Column(Integer)
-    bitrate = Column(String(10))
-    frequency = Column(String(10))
-    lyrics = Column(sqlalchemy.types.Text)
-    trackno = Column(Integer)
+    duration = Column(Integer, nullable=True)
+    year = Column(Integer, nullable=True)
+    bitrate = Column(String(10), nullable=True)
+    frequency = Column(String(10), nullable=True)
+    lyrics = Column(sqlalchemy.types.Text, nullable=True)
+    trackno = Column(Integer, nullable=True)
     
     def __init__(self, name, uripath, genre_id, album_id, duration=0, year=0, bitrate='', frequency='', lyrics='', trackno=''):
         self.name = name
