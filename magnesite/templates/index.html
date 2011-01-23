@@ -39,7 +39,7 @@
 		    });
 		    
 		    if (window.external){
-			    if (window.external.AddSearchProvider) {
+			    if ('AddSearchProvider' in window.external) {
 				    $("#summary").append("<span style=\"float:right;\"><a title=\"Add me !\" href=\"javascript:addSearchProvider();\">FTPVista dans ton navigateur !</a></span>")
 			    }
 		    }
