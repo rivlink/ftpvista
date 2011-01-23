@@ -17,6 +17,10 @@
 </head>
 <body>
 	<script type="text/javascript">
+		function addSearchProvider(){
+			window.external.AddSearchProvider('/{{ sPrefix }}resources/search_engine.xml');
+		};
+		
 		$(document).ready(function() {
 			$(function() {
 				//Create tabs, with history support 
@@ -34,6 +38,11 @@
 			    	//To avoid the execution of the # in the href
 				    return false;
 			    });
+
+			    var is_installed = window.external.IsSearchProviderInstalled('/{{ sPrefix }}resources/search_engine.xml');
+			    if (is_installed == 0){
+				    $("#summary").append(" - <span><a title=\"Add me !\" href=\"javascript:addSearchProvider();\">Ajoutez FTPVista comme moteur de recherche à votre navigateur !</a></span>")
+			    }
 			    
 				//TreeTable
 				/*
@@ -46,7 +55,7 @@
 				});
 				*/
 
-				// Make visible that a row is clicked
+				// Make visible a clicked row
 				$("#browser tbody tr").mousedown(function() {
 				  $("tr.selected").removeClass("selected"); // Deselect currently selected rows
 				  $(this).addClass("selected");
@@ -68,7 +77,7 @@
 	<div id="header">
 		<h1>FTPVista</h1>
 	</div>
-	<span>{{ nb_files }} fichiers - Total : {{ files_size|filesizeformat }}</span>
+	<div id="summary"><span>{{ nb_files }} fichiers - Total : {{ files_size|filesizeformat }}</span></div>
 	<div id="search">
 		<form method="get" action="/{{ sPrefix }}search">
 			<div id="tabs">
