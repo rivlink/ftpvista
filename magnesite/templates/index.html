@@ -18,7 +18,7 @@
 <body>
 	<script type="text/javascript">
 		function addSearchProvider(){
-			window.external.AddSearchProvider('/{{ sPrefix }}resources/search_engine.xml');
+			window.external.AddSearchProvider('http://10.0.0.1/{{ sPrefix }}resources/search_engine.xml');
 		};
 		
 		$(document).ready(function() {
@@ -43,7 +43,7 @@
 				    is_installed = window.external.IsSearchProviderInstalled('/{{ sPrefix }}resources/search_engine.xml');
 			    }
 			    if (window.external && window.external.AddSearchProvider && is_installed == 0) {
-				    $("#summary").append(" - <span><a title=\"Add me !\" href=\"javascript:addSearchProvider();\">Ajoutez FTPVista comme moteur de recherche à votre navigateur !</a></span>")
+				    $("#summary").append(" - <span style=\"float:right;\"><a title=\"Add me !\" href=\"javascript:addSearchProvider();\">FTPVista dans ton navigateur !</a></span>")
 			    }
 			    
 				//TreeTable
