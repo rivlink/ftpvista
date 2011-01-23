@@ -22,58 +22,56 @@
 		};
 		
 		$(document).ready(function() {
-			$(function() {
-				//Create tabs, with history support 
-			    $("ul.tabs").tabs("div.panes > div").history();
+			//Create tabs, with history support 
+		    $("ul.tabs").tabs("div.panes > div").history();
 
-			    //Show/hide advanced option pane in each tab
-			    $(".plus_sign").click(function(){
-				    var sTxt = ' Filtres';
-			    	var cur_pane = $(this);
-			    	cur_pane.next(".advanced_pane").toggle("fast");
-				    if (cur_pane.html().indexOf('+') != -1)
-				    	cur_pane.html("-" + sTxt);
-				    else
-				    	cur_pane.html("+" + sTxt);
-			    	//To avoid the execution of the # in the href
-				    return false;
-			    });
-			    var is_installed = 0;
-			    if (window.external && window.external.IsSearchProviderInstalled) {
-				    is_installed = window.external.IsSearchProviderInstalled('http://10.0.0.1/{{ sPrefix }}resources/search_engine.xml');
-			    }
-			    if (window.external && window.external.AddSearchProvider && is_installed == 0) {
-				    $("#summary").append("<span style=\"float:right;\"><a title=\"Add me !\" href=\"javascript:addSearchProvider();\">FTPVista dans ton navigateur !</a></span>")
-			    }
-			    
-				//TreeTable
-				/*
-				$("#browser").treeTable({
-					  expandable: true,
-					  childPrefix: "child-of-",
-					  clickableNodeNames: false,
-					  indent: 19,
-					  initialState: "collapsed"
-				});
-				*/
-
-				// Make visible a clicked row
-				$("#browser tbody tr").mousedown(function() {
-				  $("tr.selected").removeClass("selected"); // Deselect currently selected rows
-				  $(this).addClass("selected");
-				});
-
-				// Make sure row is selected when span is clicked
-				$("#browser tbody tr span").mousedown(function() {
-				  $($(this).parents("tr")[0]).trigger("mousedown");
-				});
-
-				//Custom Multiselect
-				$("#ft").multiSelect({
-					oneOrMoreSelected: '*',
-					selectAllText: 'Tous',
-					noneSelected: 'Sélectionner des options' });
+		    //Show/hide advanced option pane in each tab
+		    $(".plus_sign").click(function(){
+			    var sTxt = ' Filtres';
+		    	var cur_pane = $(this);
+		    	cur_pane.next(".advanced_pane").toggle("fast");
+			    if (cur_pane.html().indexOf('+') != -1)
+			    	cur_pane.html("-" + sTxt);
+			    else
+			    	cur_pane.html("+" + sTxt);
+		    	//To avoid the execution of the # in the href
+			    return false;
+		    });
+		    var is_installed = 0;
+		    if (window.external && window.external.IsSearchProviderInstalled) {
+			    is_installed = window.external.IsSearchProviderInstalled('http://10.0.0.1/{{ sPrefix }}resources/search_engine.xml');
+		    }
+		    if (window.external && window.external.AddSearchProvider && is_installed == 0) {
+			    $("#summary").append("<span style=\"float:right;\"><a title=\"Add me !\" href=\"javascript:addSearchProvider();\">FTPVista dans ton navigateur !</a></span>")
+		    }
+		    
+			//TreeTable
+			/*
+			$("#browser").treeTable({
+				  expandable: true,
+				  childPrefix: "child-of-",
+				  clickableNodeNames: false,
+				  indent: 19,
+				  initialState: "collapsed"
 			});
+			*/
+
+			// Make visible a clicked row
+			$("#browser tbody tr").mousedown(function() {
+			  $("tr.selected").removeClass("selected"); // Deselect currently selected rows
+			  $(this).addClass("selected");
+			});
+
+			// Make sure row is selected when span is clicked
+			$("#browser tbody tr span").mousedown(function() {
+			  $($(this).parents("tr")[0]).trigger("mousedown");
+			});
+
+			//Custom Multiselect
+			$("#ft").multiSelect({
+				oneOrMoreSelected: '*',
+				selectAllText: 'Tous',
+				noneSelected: 'Sélectionner des options' });
 		});
 	</script>
 	<div id="header">
