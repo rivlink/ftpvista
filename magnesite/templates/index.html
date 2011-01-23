@@ -39,11 +39,7 @@
 		    });
 		    
 		    if (window.external){
-		    	var is_installed = 0;
-			    if (window.external.IsSearchProviderInstalled) {
-				    is_installed = window.external.IsSearchProviderInstalled('http://10.0.0.1/{{ sPrefix }}resources/search_engine.xml');
-			    }
-			    if (window.external.AddSearchProvider && is_installed == 0) {
+			    if (window.external.AddSearchProvider) {
 				    $("#summary").append("<span style=\"float:right;\"><a title=\"Add me !\" href=\"javascript:addSearchProvider();\">FTPVista dans ton navigateur !</a></span>")
 			    }
 		    }
