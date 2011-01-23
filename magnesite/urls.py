@@ -10,7 +10,8 @@ urlpatterns = patterns('',
     (r'^'+c.sPrefix+'search_results/$', 'magnesite.search.views.search_results'),
     (r'^'+c.sPrefix+'js/(?P<path>.*)$', 'django.views.static.serve', {'document_root': c.path+'templates/js'}),
     (r'^'+c.sPrefix+'images/(?P<path>.*)$', 'django.views.static.serve', {'document_root': c.path+'templates/images'}),
-    (r'^'+c.sPrefix+'css/(?P<path>.*)$', 'django.views.static.serve', {'document_root': c.path+'templates/css'})
+    (r'^'+c.sPrefix+'css/(?P<path>.*)$', 'django.views.static.serve', {'document_root': c.path+'templates/css'}),
+    (r'^'+c.sPrefix+'resources/(?P<path>.*)$', 'django.views.static.serve', {'document_root': c.path+'resources'})
 )
 
 if UNDER_CONSTRUCTION:
