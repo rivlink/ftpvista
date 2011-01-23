@@ -50,7 +50,7 @@ class Servers:
         Servers.correspondences = list()
         f = open('/home/ftpvista/ftpvista3/correspondences.ftp','r')
         for line in f.readlines():
-            Servers.correspondences.append(line.split('\t').strip())
+            Servers.correspondences.append(line.split('\t'))
         f.close()
     
     @staticmethod
@@ -64,5 +64,5 @@ class Servers:
         correspondences = Servers.get_correspondences()
         for ip, surnom in correspondences:
             if sIP == ip:
-                return ip + " - " + surnom
+                return ip + " - " + surnom.strip()
         return sIP
