@@ -50,7 +50,7 @@ class Servers:
         Servers.correspondences = list()
         f = open('/home/ftpvista/ftpvista3/correspondences.ftp','r')
         for line in f.readlines():
-            Servers.correspondences.append(line.split('\t'))
+            Servers.correspondences.append(line.split('\t').strip())
         f.close()
     
     @staticmethod
