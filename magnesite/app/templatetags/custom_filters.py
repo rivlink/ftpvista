@@ -18,5 +18,5 @@ def filesizeformat2(bytes):
         return ugettext("%.1f Mo") % (bytes / (1024 * 1024))
     if bytes < 1024 * 1024 * 1024 * 1024:
         return ugettext("%.1f Go") % (bytes / (1024 * 1024 * 1024))
-    return ugettext("%.1f To") % (bytes / (1024 * 1024 * 1024))
+    return ugettext("%.1f To") % (bytes / (1024 * 1024 * 1024 * 1024))
 filesizeformat2.is_safe = True
