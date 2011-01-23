@@ -1,4 +1,5 @@
 from django import template
+from django.utils.translation import ugettext, ungettext
 
 register = template.Library()
 
