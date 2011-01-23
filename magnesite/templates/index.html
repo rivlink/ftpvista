@@ -38,12 +38,12 @@
 			    return false;
 		    });
 		    
-		    if (typeOf(window.external) != 'undefined'){
+		    if (typeOf(external) != 'undefined'){
 		    	var is_installed = 0;
-			    if (typeOf(window.external.IsSearchProviderInstalled) != 'undefined') {
+			    if (typeOf(external.IsSearchProviderInstalled) != 'undefined') {
 				    is_installed = window.external.IsSearchProviderInstalled('http://10.0.0.1/{{ sPrefix }}resources/search_engine.xml');
 			    }
-			    if (typeOf(window.external.AddSearchProvider) != 'undefined' && is_installed == 0) {
+			    if (typeOf(external.AddSearchProvider) != 'undefined' && is_installed == 0) {
 				    $("#summary").append("<span style=\"float:right;\"><a title=\"Add me !\" href=\"javascript:addSearchProvider();\">FTPVista dans ton navigateur !</a></span>")
 			    }
 		    }
