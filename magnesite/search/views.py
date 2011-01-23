@@ -6,12 +6,13 @@ from django.template import Context, loader
 from django.shortcuts import render_to_response
 from magnesite.search import models
 from app.search_filter import SearchFilterFileTypes
+from django import template
 import app.const as c
 import re
-from django.template.defaultfilters import stringfilter
+
+register = template.Library()
 
 @register.filter
-@stringfilter
 def filesizeformat2(bytes):
     try:
         bytes = float(bytes)
