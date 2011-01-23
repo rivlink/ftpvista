@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
+<ShortName>ftpvista</ShortName>
+<LongName>ftpvista, moteur de recherche pour ftp</LongName>
+<Developer>Dustri</Developer>
+<Description>Moteur de recherche pour les ftp de la Riverotte</Description>
+<AdultContent>true</AdultContent>
+<InputEncoding>UTF-8</InputEncoding>
+<Tags>ftpvista ftp</Tags>
+<Contact>#riverotte@irc.rezosup.org</Contact>
+<Language>*</Language>
+<OutputEncoding>UTF-8</OutputEncoding>
+<InputEncoding>UTF-8</InputEncoding>
+<Url type="text/html" method="GET" template="http://10.0.0.1/ftpvista3/search/?s={searchTerms}"/>
+<!-- <Url type="application/x-suggestions+json" template="http://10.0.0.1/ftpvista3/suggest/?s={searchTerms}"/> -->
+</OpenSearchDescription>
