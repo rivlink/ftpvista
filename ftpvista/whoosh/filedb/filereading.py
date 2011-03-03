@@ -18,16 +18,16 @@ from bisect import bisect_left
 from heapq import nlargest, nsmallest
 from threading import Lock
 
-from whoosh.filedb.fieldcache import FieldCache
+from whoosh.filedb.fieldcache import FieldCache, DefaultFieldCachingPolicy
 from whoosh.filedb.filepostings import FilePostingReader
-from whoosh.filedb.filestore import ReadOnlyError
 from whoosh.filedb.filetables import (TermIndexReader, StoredFieldReader,
                                       LengthReader, TermVectorReader)
 from whoosh.matching import FilterMatcher, ListMatcher
 from whoosh.reading import IndexReader, TermNotFound
 from whoosh.util import protected
 
-SAVE_BY_DEFAULT = False
+SAVE_BY_DEFAULT = True
+
 
 # Reader class
 
@@ -38,6 +38,12 @@ class SegmentReader(IndexReader):
         self.storage = storage
         self.schema = schema
         self.segment = segment
+        
+        if hasattr(self.segment, "uuid"):
+            self.uuid_string = str(self.segment.uuid)
+        else:
+            import uuid
+            self.uuid_string = str(uuid.uuid4())
         
         # Term index
         tf = storage.open_file(segment.termsindex_filename)
@@ -70,7 +76,7 @@ class SegmentReader(IndexReader):
         self.dc = segment.doc_count_all()
         assert self.dc == self.storedfields.length
         
-        self.caches = {}
+        self.set_caching_policy()
         
         self.is_closed = False
         self._sync_lock = Lock()
@@ -79,7 +85,8 @@ class SegmentReader(IndexReader):
         return self.segment.generation
 
     def _open_vectors(self):
-        if self.vectorindex: return
+        if self.vectorindex:
+            return
         
         storage, segment = self.storage, self.segment
         
@@ -105,8 +112,11 @@ class SegmentReader(IndexReader):
             self.postfile.close()
         if self.vectorindex:
             self.vectorindex.close()
+        if self.vpostfile:
+            self.vpostfile.close()
         #if self.fieldlengths:
         #    self.fieldlengths.close()
+        self.caching_policy = None
         self.is_closed = True
 
     def doc_count_all(self):
@@ -132,7 +142,8 @@ class SegmentReader(IndexReader):
 
     @protected
     def doc_field_length(self, docnum, fieldname, default=0):
-        if self.fieldlengths is None: return default
+        if self.fieldlengths is None:
+            return default
         return self.fieldlengths.get(docnum, fieldname, default=default)
 
     def max_field_length(self, fieldname):
@@ -140,8 +151,11 @@ class SegmentReader(IndexReader):
 
     @protected
     def has_vector(self, docnum, fieldname):
-        self._open_vectors()
-        return (docnum, fieldname) in self.vectorindex
+        if self.schema[fieldname].vector:
+            self._open_vectors()
+            return (docnum, fieldname) in self.vectorindex
+        else:
+            return False
 
     @protected
     def __iter__(self):
@@ -170,7 +184,7 @@ class SegmentReader(IndexReader):
     def _term_info(self, fieldname, text):
         self._test_field(fieldname)
         try:
-            return self.termsindex[(fieldname, text)]
+            return self.termsindex[fieldname, text]
         except KeyError:
             raise TermNotFound("%s:%r" % (fieldname, text))
 
@@ -199,7 +213,10 @@ class SegmentReader(IndexReader):
         # instead of loading the field values from disk
         if self.fieldcache_loaded(fieldname):
             fieldcache = self.fieldcache(fieldname)
-            return iter(fieldcache.texts)
+            it = iter(fieldcache.texts)
+            # The first value in fieldcache.texts is the default; throw it away
+            it.next()
+            return it
         
         return self.expand_prefix(fieldname, '')
 
@@ -223,38 +240,30 @@ class SegmentReader(IndexReader):
                     break
                 yield t
 
-    def first_ids(self, fieldname):
-        self._test_field(fieldname)
-        format = self.schema[fieldname].format
-        
-        for (fn, t), (totalfreq, offset, postcount) in self.termsindex.items_from((fieldname, '')):
-            if fn != fieldname:
-                break
-            
-            if isinstance(offset, (int, long)):
-                postreader = FilePostingReader(self.postfile, offset, format)
-                id = postreader.id()
-            else:
-                id = offset[0][0]
-            
-            yield (t, id)
-
-    def first_id(self, fieldname, text):
-        self._test_field(fieldname)
-        format = self.schema[fieldname].format
-        
-        offset = self.termsindex[(fieldname, text)][1]
-        if isinstance(offset, (int, long)):
-            postreader = FilePostingReader(self.postfile, offset, format)
-            return postreader.id()
-        else:
-            return offset[0][0]
+#    def first_id(self, fieldname, text):
+#        id = None
+#        try:
+#            offset = self.termsindex[fieldname, text][1]
+#        except KeyError:
+#            raise TermNotFound((fieldname, text))
+#        else:
+#            if isinstance(offset, (int, long)):
+#                format = self.schema[fieldname].format
+#                pr = FilePostingReader(self.postfile, offset, format)
+#                if pr.is_active():
+#                    id = pr.id()
+#            else:
+#                id = offset[0][0]
+#        
+#        if id is not None and not self.is_deleted(id):
+#            return id
+#        raise TermNotFound((fieldname, text))
 
     def postings(self, fieldname, text, scorer=None):
         self._test_field(fieldname)
         format = self.schema[fieldname].format
         try:
-            offset = self.termsindex[(fieldname, text)][1]
+            offset = self.termsindex[fieldname, text][1]
         except KeyError:
             raise TermNotFound("%s:%r" % (fieldname, text))
 
@@ -293,58 +302,47 @@ class SegmentReader(IndexReader):
     def supports_caches(self):
         return True
 
-    def _fieldcache_filename(self, fieldname):
-        return "%s.%s.fc" % (self.segment.name, fieldname)
-
-    def _put_fieldcache(self, name, fieldcache):
-        self.caches[name] = fieldcache
-
-    def _load_fieldcache(self, fieldname):
-        storage = self.storage
-        filename = self._fieldcache_filename(fieldname)
-        gzipped = False
+    def set_caching_policy(self, cp=None, save=True, storage=None):
+        """This method lets you control the caching policy of the reader. You
+        can either pass a :class:`whoosh.filedb.fieldcache.FieldCachingPolicy`
+        as the first argument, *or* use the `save` and `storage` keywords to
+        alter the default caching policy::
         
-        # It's possible to load GZip'd caches but for it's MUCH slower,
-        # especially for large caches
-        gzname = filename + ".gz"
-        if storage.file_exists(gzname) and not storage.file_exists(filename):
-            filename = gzname
-            gzipped = True
-        
-        f = storage.open_file(filename, mapped=False, gzip=gzipped)
-        cache = FieldCache.from_file(f)
-        f.close()
-        return cache
-
-    def _cachefile_exists(self, fieldname):
-        storage = self.storage
-        filename = self._fieldcache_filename(fieldname)
-        gzname = filename + ".gz"
-        return storage.file_exists(filename) or storage.file_exists(gzname)
-
-    def _save_fieldcache(self, name, cache):
-        filename = self._fieldcache_filename(name)
-        if self.GZIP_CACHES:
-            filename += ".gz"
+            # Use a custom field caching policy object
+            reader.set_caching_policy(MyPolicy())
             
-        f = self.storage.create_file(filename, gzip=self.GZIP_CACHES)
-        cache.to_file(f)
-        f.close()
+            # Use the default caching policy but turn off saving caches to disk
+            reader.set_caching_policy(save=False)
+            
+            # Use the default caching policy but save caches to a custom storage
+            from whoosh.filedb.filestore import FileStorage
+            mystorage = FileStorage("path/to/cachedir")
+            reader.set_caching_policy(storage=mystorage)
+        
+        :param cp: a :class:`whoosh.filedb.fieldcache.FieldCachingPolicy`
+            object. If this argument is not given, the default caching policy
+            is used.
+        :param save: save field caches to disk for re-use. If a caching policy
+            object is specified using `cp`, this argument is ignored.
+        :param storage: a custom :class:`whoosh.store.Storage` object to use
+            for saving field caches. If a caching policy object is specified
+            using `cp` or `save` is `False`, this argument is ignored. 
+        """
+        
+        if not cp:
+            if save and storage is None:
+                storage = self.storage
+            else:
+                storage = None
+            cp = DefaultFieldCachingPolicy(self.segment.name, storage=storage)
+        
+        if type(cp) is type:
+            cp = cp()
+        
+        self.caching_policy = cp
 
-    def _create_fieldcache(self, fieldname, save=SAVE_BY_DEFAULT, name=None,
-                           default=u''):
-        if name in self.schema:
-            raise Exception("Custom name %r is the name of a field")
-        savename = name if name else fieldname
-        
-        if self.fieldcache_available(savename):
-            # Don't recreate the cache if it already exists
-            return None
-        
-        cache = FieldCache.from_field(self, fieldname, default=default)
-        if save and not self.storage.readonly:
-            self._save_fieldcache(savename, cache)
-        return cache
+    def _fieldkey(self, fieldname):
+        return "%s/%s" % (self.uuid_string, fieldname)
 
     def define_facets(self, name, qs, save=SAVE_BY_DEFAULT):
         if name in self.schema:
@@ -354,10 +352,8 @@ class SegmentReader(IndexReader):
             # Don't recreate the cache if it already exists
             return
         
-        cache = FieldCache.from_lists(qs, self.doc_count_all())
-        if save and not self.storage.readonly:
-            self._save_fieldcache(name, cache)
-        self._put_fieldcache(name, cache)
+        cache = self.caching_policy.get_class().from_lists(qs, self.doc_count_all())
+        self.caching_policy.put(self._fieldkey(name), cache, save=save)
 
     def fieldcache(self, fieldname, save=SAVE_BY_DEFAULT):
         """Returns a :class:`whoosh.filedb.fieldcache.FieldCache` object for
@@ -368,13 +364,11 @@ class SegmentReader(IndexReader):
             doesn't already exist.
         """
         
-        if fieldname in self.caches:
-            return self.caches[fieldname]
-        elif self._cachefile_exists(fieldname):
-            fc = self._load_fieldcache(fieldname)
-        else:
-            fc = self._create_fieldcache(fieldname, save=SAVE_BY_DEFAULT)
-        self._put_fieldcache(fieldname, fc)
+        key = self._fieldkey(fieldname)
+        fc = self.caching_policy.get(key)
+        if not fc:
+            fc = FieldCache.from_field(self, fieldname)
+            self.caching_policy.put(key, fc, save=save)
         return fc
     
     def fieldcache_available(self, fieldname):
@@ -382,48 +376,35 @@ class SegmentReader(IndexReader):
         memory already or on disk).
         """
         
-        return fieldname in self.caches or self._cachefile_exists(fieldname)
+        return self._fieldkey(fieldname) in self.caching_policy
     
     def fieldcache_loaded(self, fieldname):
         """Returns True if a field cache for the given field is in memory.
         """
         
-        return fieldname in self.caches
+        return self.caching_policy.is_loaded(self._fieldkey(fieldname))
 
     def unload_fieldcache(self, name):
-        try:
-            del self.caches[name]
-        except:
-            pass
-        
-    def delete_fieldcache(self, name):
-        self.unload_fieldcache(name)
-        filename = self._fieldcache_filename(name)
-        if self.storage.file_exists(filename):
-            try:
-                self.storage.delete_file(filename)
-            except:
-                pass
-
+        self.caching_policy.delete(self._fieldkey(name))
+    
     # Sorting and faceting methods
     
-    def key_fn(self, fieldname):
-        if isinstance(fieldname, (tuple, list)):
-            # The "fieldname" is actually a sequence of field names to sort by
-            fcs = [self.fieldcache(fn) for fn in fieldname]
-            keyfn = lambda docnum: tuple(fc.key_for(docnum) for fc in fcs)
+    def key_fn(self, fields):
+        if isinstance(fields, basestring):
+            fields = (fields, )
+        
+        if len(fields) > 1:
+            fcs = [self.fieldcache(fn) for fn in fields]
+            return lambda docnum: tuple(fc.key_for(docnum) for fc in fcs)
         else:
-            fc = self.fieldcache(fieldname)
-            keyfn = fc.key_for
-            
-        return keyfn
+            return self.fieldcache(fields[0]).key_for
     
-    def sort_docs_by(self, fieldname, docnums, reverse=False):
-        keyfn = self.key_fn(fieldname)
+    def sort_docs_by(self, fields, docnums, reverse=False):
+        keyfn = self.key_fn(fields)
         return sorted(docnums, key=keyfn, reverse=reverse)
     
-    def key_docs_by(self, fieldname, docnums, limit, reverse=False, offset=0):
-        keyfn = self.key_fn(fieldname)
+    def key_docs_by(self, fields, docnums, limit, reverse=False, offset=0):
+        keyfn = self.key_fn(fields)
         
         if limit is None:
             # Don't bother sorting, the caller will do that
@@ -436,7 +417,7 @@ class SegmentReader(IndexReader):
             
             return op(limit, ((keyfn(docnum), docnum + offset)
                               for docnum in docnums))
-
+            
             
         
 

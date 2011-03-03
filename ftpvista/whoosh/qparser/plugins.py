@@ -56,27 +56,21 @@ class RangePlugin(Plugin):
         return ((RangePlugin.Range, 1), )
     
     class Range(Token):
-        expr = rcompile(r"""
+        expr = re.compile(r"""
         (?P<open>\{|\[)               # Open paren
-        
-        (                             # Begin optional "start"
-          (                           # Begin choice between start1 and start2
-            ('(?P<start2>[^']+)')     # Quoted start
-            | (?P<start1>[^ ]+)       # ...or regular start
-          )                           # End choice
-        [ ]+)?                        # Space at end of optional "start"
-        
-        [Tt][Oo]                      # "to" between start and end
-        
-        ([ ]+                         # Space at start of optional "end"
-          (                           # Begin choice between end1 and end2
-            ('(?P<end2>[^']+)')       # Quoted end
-            | (?P<end1>[^\]\}]*)      # ...or normal end
-          )                           # End choice
-        )?                            # End of optional "end
-        
-        (?P<close>\}|\])              # Close paren
-        """, re.VERBOSE)
+        (?P<start>
+            ('[^']*?'\s+)             # single-quoted 
+            |                         # or
+            (.+?(?=[Tt][Oo]))         # everything until "to"
+        )?
+        [Tt][Oo]                      # "to"
+        (?P<end>
+            (\s+'[^']*?')             # single-quoted
+            |                         # or
+            ((.+?)(?=]|}))            # everything until "]" or "}"
+        )?
+        (?P<close>}|])                # Close paren
+        """, re.UNICODE | re.VERBOSE)
         
         def __init__(self, start, end, startexcl, endexcl, fieldname=None, boost=1.0):
             self.fieldname = fieldname
@@ -85,19 +79,6 @@ class RangePlugin(Plugin):
             self.startexcl = startexcl
             self.endexcl = endexcl
             self.boost = boost
-        
-        def set_boost(self, b):
-            return self.__class__(self.start, self.end, self.startexcl,
-                                  self.endexcl, fieldname=self.fieldname,
-                                  boost=b)
-        
-        def set_fieldname(self, name, force=False):
-            if force or self.fieldname is None:
-                return self.__class__(self.start, self.end, self.startexcl,
-                                      self.endexcl, fieldname=name,
-                                      boost=self.boost)
-            else:
-                return self
         
         def __repr__(self):
             r = "%s:(%r, %r, %s, %s)" % (self.fieldname, self.start, self.end,
@@ -108,8 +89,17 @@ class RangePlugin(Plugin):
         
         @classmethod
         def create(cls, parser, match):
-            start = match.group("start2") or match.group("start1")
-            end = match.group("end2") or match.group("end1")
+            start = match.group("start")
+            end = match.group("end")
+            if start:
+                start = start.rstrip()
+                if start.startswith("'") and start.endswith("'"):
+                    start = start[1:-1]
+            if end:
+                end = end.lstrip()
+                if end.startswith("'") and end.endswith("'"):
+                    end = end[1:-1]
+            
             return cls(start, end, startexcl=match.group("open") == "{",
                        endexcl=match.group("close") == "}")
             
@@ -135,11 +125,6 @@ class RangePlugin(Plugin):
                 if end:
                     end = get_single_text(field, end, tokenize=False,
                                           removestops=False)
-            
-            if start is None:
-                start = u''
-            if end is None:
-                end = u'\uFFFF'
             
             return query.TermRange(fieldname, start, end, self.startexcl,
                                    self.endexcl, boost=self.boost)
@@ -253,10 +238,12 @@ class WildcardPlugin(Plugin):
         return ((WildcardPlugin.Wild, 1), )
     
     class Wild(BasicSyntax):
+        # Any number of word chars, followed by at least one question mark or
+        # star, followed by any number of word chars, question marks, or stars
         # \u055E = Armenian question mark
         # \u061F = Arabic question mark
         # \u1367 = Ethiopic question mark
-        expr = rcompile(u"[^ \t\r\n*?\u055E\u061F\u1367]*[*?\u055E\u061F\u1367]\\S*")
+        expr = rcompile(u"\\w*[*?\u055E\u061F\u1367](\\w|[*?\u055E\u061F\u1367])*")
         qclass = query.Wildcard
         
         def __repr__(self):
@@ -345,55 +332,85 @@ class FieldsPlugin(Plugin):
     This plugin is included in the default parser configuration.
     """
     
+    def __init__(self, remove_unknown=True):
+        self.remove_unknown = remove_unknown
+    
     def tokens(self, parser):
         return ((FieldsPlugin.Field, 0), )
     
     def filters(self, parser):
-        return ((FieldsPlugin.do_fieldnames, 100), )
+        return ((self.do_fieldnames, 100), )
 
-    @staticmethod
-    def do_fieldnames(parser, stream):
-        newstream = stream.empty()
-        newname = None
-        for i, t in enumerate(stream):
-            if isinstance(t, FieldsPlugin.Field):
-                valid = False
-                if i < len(stream) - 1:
-                    next = stream[i+1]
-                    if not isinstance(next, (White, FieldsPlugin.Field)):
-                        newname = t.fieldname
-                        valid = True
-                if not valid:
-                    newstream.append(Word(t.fieldname, fieldname=parser.fieldname))
-                continue
-            
-            if isinstance(t, Group):
-                t = FieldsPlugin.do_fieldnames(parser, t)
-                
-            if newname is not None:
-                t = t.set_fieldname(newname)
-            newstream.append(t)
-            newname = None
+    def do_fieldnames(self, parser, stream):
+        fieldtoken = FieldsPlugin.Field
         
+        # Look for field tokens that aren't in the schema and convert them to
+        # text
+        if self.remove_unknown and parser.schema is not None:
+            newstream = stream.empty()
+            text = None
+            for token in stream:
+                if (isinstance(token, fieldtoken)
+                    and token.fieldname not in parser.schema):
+                    text = token.original
+                else:
+                    if text:
+                        try:
+                            token = token.prepend_text(text)
+                        except NotImplementedError:
+                            newstream.append(Word(text))
+                        text = None
+                    newstream.append(token)
+            
+            if text:
+                newstream.append(Word(text))
+            
+            stream = newstream
+        
+        newstream = stream.empty()
+        i = len(stream)
+        # Iterate backwards through the stream, looking for field-able objects
+        # with field tokens in front of them
+        while i > 0:
+            i -= 1
+            t = stream[i]
+            
+            if isinstance(t, fieldtoken):
+                # If this we see a field token in the stream, it means it
+                # wasn't in front of a field-able object, so convert it into a
+                # Word token
+                t = Word(t.original)
+            elif isinstance(t, Group):
+                t = self.do_fieldnames(parser, t)
+            
+            # If this is a field-able object (not whitespace or a field token)
+            # and it has a field token in front of it, apply the field token
+            if (i > 0 and not isinstance(t, (White, fieldtoken))
+                and isinstance(stream[i - 1], fieldtoken)):
+                # Set the field name for this object from the field token
+                t = t.set_fieldname(stream[i - 1].fieldname)
+                # Skip past the field token
+                i -= 1
+            
+            newstream.append(t)
+
+        newstream.reverse()
         return newstream
     
     class Field(Token):
-        expr = rcompile(u"(\w[\w\d]*):")
+        expr = rcompile(r"(?P<fieldname>\w+):")
         
-        def __init__(self, fieldname):
+        def __init__(self, fieldname, original):
             self.fieldname = fieldname
+            self.original = original
         
         def __repr__(self):
             return "<%s:>" % self.fieldname
         
-        def set_fieldname(self, fieldname, force=False):
-            return self.__class__(fieldname)
-        
         @classmethod
         def create(cls, parser, match):
-            fieldname = match.group(1)
-            if not parser.schema or fieldname == "*" or (fieldname in parser.schema):
-                return cls(fieldname)
+            fieldname = match.group("fieldname")
+            return cls(fieldname, match.group(0))
     
 
 class OperatorsPlugin(Plugin):
@@ -409,7 +426,7 @@ class OperatorsPlugin(Plugin):
     ``Not`` keyword arguments. The keyword value can be a pattern string or
     a compiled expression, or None to remove the operator::
     
-        qp = qparser.QueryParser("content")
+        qp = qparser.QueryParser("content", schema)
         cp = qparser.OperatorsPlugin(And="&", Or="\\|", AndNot="&!", AndMaybe="&~", Not=None)
         qp.replace_plugin(cp)
     
@@ -446,12 +463,18 @@ class OperatorsPlugin(Plugin):
             ops = []
         
         if not clean:
-            if Not: ops.append((PrefixOperator(Not, NotGroup), 0))
-            if And: ops.append((InfixOperator(And, AndGroup), 0))
-            if Or: ops.append((InfixOperator(Or, OrGroup), 0))
-            if AndNot: ops.append((InfixOperator(AndNot, AndNotGroup), -5))
-            if AndMaybe: ops.append((InfixOperator(AndMaybe, AndMaybeGroup), -5))
-            if Require: ops.append((InfixOperator(Require, RequireGroup), 0))
+            if Not:
+                ops.append((PrefixOperator(Not, NotGroup), 0))
+            if And:
+                ops.append((InfixOperator(And, AndGroup), 0))
+            if Or:
+                ops.append((InfixOperator(Or, OrGroup), 0))
+            if AndNot:
+                ops.append((InfixOperator(AndNot, AndNotGroup), -5))
+            if AndMaybe:
+                ops.append((InfixOperator(AndMaybe, AndMaybeGroup), -5))
+            if Require:
+                ops.append((InfixOperator(Require, RequireGroup), 0))
         
         self.ops = ops
     
@@ -462,7 +485,9 @@ class OperatorsPlugin(Plugin):
         return ((self.do_operators, 600), )
     
     def do_operators(self, parser, stream, level=0):
+        #print "  " * level, "In=", stream
         for op, _ in self.ops:
+            #print "  " * level, ":", op
             if op.left_assoc:
                 i = 0
                 while i < len(stream):
@@ -478,15 +503,16 @@ class OperatorsPlugin(Plugin):
                     if t is op:
                         i = t.make_group(parser, stream, i)
                     i -= 1
-        
-        #print " " * level, ">stream=", stream
+            #print "  " * level, "=", stream
+                    
+        #print "  " * level, ">stream=", stream
         newstream = stream.empty()
         for t in stream:
             if isinstance(t, Group):
-                t = self.do_operators(parser, t, level+1)
+                t = self.do_operators(parser, t, level + 1)
             newstream.append(t)
         
-        #print " " * level, "<stream=", newstream
+        #print "  " * level, "<stream=", newstream
         return newstream
 
 CompoundsPlugin = OperatorsPlugin
@@ -529,7 +555,6 @@ class NotPlugin(Plugin):
         return newstream
  
 
-
 class BoostPlugin(Plugin):
     """Adds the ability to boost clauses of the query using the circumflex.
     
@@ -547,7 +572,7 @@ class BoostPlugin(Plugin):
         newstream = stream.empty()
         for i, t in enumerate(stream):
             if isinstance(t, BoostPlugin.Boost):
-                if i == 0 or isinstance(stream[i-1], (BoostPlugin.Boost, White)):
+                if i == 0 or isinstance(stream[i - 1], (BoostPlugin.Boost, White)):
                     t = Word(t.original)
             newstream.append(t)
         return newstream
@@ -691,7 +716,7 @@ class FieldAliasPlugin(Plugin):
     """Adds the ability to use "aliases" of fields in the query string.
     
     >>> # Allow users to use 'body' or 'text' to refer to the 'content' field
-    >>> parser.add_plugin(FieldAliasPlugin({"content": ("body", "text")}))
+    >>> parser.add_plugin(FieldAliasPlugin({"content": ["body", "text"]}))
     >>> parser.parse("text:hello")
     Term("content", "hello")
     """
@@ -714,10 +739,11 @@ class FieldAliasPlugin(Plugin):
     def do_aliases(self, parser, stream):
         newstream = stream.empty()
         for t in stream:
-            if (not isinstance(t, Group)
-                  and t.fieldname is not None
+            if isinstance(t, Group):
+                t = self.do_aliases(parser, t)
+            elif (t.fieldname is not None
                   and t.fieldname in self.reverse):
-                    t = t.set_fieldname(self.reverse[t.fieldname])
+                t = t.set_fieldname(self.reverse[t.fieldname], force=True)
             newstream.append(t)
         return newstream
 
@@ -783,6 +809,89 @@ class CopyFieldPlugin(Plugin):
         return newstream
 
 
+class GtLtPlugin(Plugin):
+    """Allows the user to use greater than/less than symbols to create range
+    queries::
+    
+        a:>100 b:<=z c:>=-1.4 d:<mz
+        
+    This is the equivalent of::
+    
+        a:{100 to] b:[to z] c:[-1.4 to] d:[to mz}
+        
+    The plugin recognizes ``>``, ``<``, ``>=``, ``<=``, ``=>``, and ``=<``
+    after a field specifier. The field specifier is required. You cannot do the
+    following::
+    
+        >100
+        
+    This plugin requires the FieldsPlugin and RangePlugin to work.
+    """
+    
+    def __init__(self, expr=r"(?P<rel>(<=|>=|<|>|=<|=>))"):
+        """
+        :param expr: a regular expression that must capture a "rel" group
+            (which contains <, >, >=, <=, =>, or =<)
+        """
+        
+        self.expr = rcompile(expr)
+    
+    def tokens(self, parser):
+        # Create a dynamic subclass of GtLtToken and give it the configured
+        # regular expression
+        tkclass = type("DynamicGtLtToken", (GtLtPlugin.GtLtToken, ),
+                       {"expr": self.expr})
+        
+        return ((tkclass, 0), )
+    
+    def filters(self, parser):
+        # Run before the fieldnames filter
+        return ((self.do_gtlt, 99), )
+    
+    def make_range(self, text, rel):
+        if rel == "<":
+            return RangePlugin.Range(None, text, False, True)
+        elif rel == ">":
+            return RangePlugin.Range(text, None, True, False)
+        elif rel == "<=" or rel == "=<":
+            return RangePlugin.Range(None, text, False, False)
+        elif rel == ">=" or rel == "=>":
+            return RangePlugin.Range(text, None, False, False)
+    
+    def do_gtlt(self, parser, stream):
+        # Look for GtLtTokens in the stream and
+        # - replace it with a Field token
+        # - if the next token is a Word, replace it with a Range based on the
+        #   GtLtToken
+        
+        gtlttoken = GtLtPlugin.GtLtToken
+        
+        newstream = stream.empty()
+        prev = None
+        for t in stream:
+            if isinstance(t, gtlttoken):
+                if not isinstance(prev, FieldsPlugin.Field):
+                    prev = None
+                    continue
+            elif isinstance(t, Word) and isinstance(prev, gtlttoken):
+                t = self.make_range(t.text, prev.rel)
+            
+            if not isinstance(t, gtlttoken):
+                newstream.append(t)
+            prev = t
+        
+        return newstream
+    
+    class GtLtToken(Token):
+        def __init__(self, rel):
+            self.rel = rel
+        
+        def __repr__(self):
+            return "{%s}" % (self.rel)
+        
+        @classmethod
+        def create(cls, parser, match):
+            return cls(match.group("rel"))
 
 
 

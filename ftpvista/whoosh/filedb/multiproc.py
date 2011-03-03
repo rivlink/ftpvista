@@ -14,15 +14,15 @@
 # limitations under the License.
 #===============================================================================
 
-import os, tempfile
+import os
+import tempfile
 from multiprocessing import Process, Queue, cpu_count
 from cPickle import dump, load
 
 from whoosh.filedb.filetables import LengthWriter, LengthReader
 from whoosh.filedb.fileindex import Segment
 from whoosh.filedb.filewriting import SegmentWriter
-from whoosh.filedb.pools import (imerge, PoolBase, read_run, TempfilePool,
-                                 write_postings)
+from whoosh.filedb.pools import (imerge, read_run, PoolBase, TempfilePool)
 from whoosh.filedb.structfile import StructFile
 from whoosh.writing import IndexWriter
 
@@ -30,7 +30,8 @@ from whoosh.writing import IndexWriter
 # Multiprocessing writer
 
 class SegmentWritingTask(Process):
-    def __init__(self, storage, indexname, segname, kwargs, jobqueue, firstjob = None):
+    def __init__(self, storage, indexname, segname, kwargs, jobqueue,
+                 firstjob=None):
         Process.__init__(self)
         self.storage = storage
         self.indexname = indexname
@@ -69,8 +70,9 @@ class SegmentWritingTask(Process):
         if not self.running:
             writer.cancel()
         else:
-            writer.pool.finish(writer.docnum, writer.lengthfile,
-                               writer.termsindex, writer.postwriter)
+            writer.pool.finish(writer.termswriter, writer.docnum,
+                               writer.lengthfile)
+            writer._close_all()
             self.jobqueue.put(writer._getsegment())
     
     def cancel(self):
@@ -149,7 +151,6 @@ class MultiSegmentWriter(IndexWriter):
             
             for task in self.tasks:
                 taskseg = self.jobqueue.get()
-                print "Segment=", taskseg
                 self.segments.append(taskseg)
             
             self.jobqueue.close()
@@ -167,6 +168,7 @@ class MultiSegmentWriter(IndexWriter):
                 readlock.release()
         finally:
             self.writelock.release()
+
 
 # Multiprocessing pool
 
@@ -224,10 +226,11 @@ class MultiPool(PoolBase):
     def __init__(self, schema, dir=None, procs=2, limitmb=32, batchsize=100,
                  **kw):
         PoolBase.__init__(self, schema, dir=dir)
+        self._make_dir()
         
         self.procs = procs
         self.limitmb = limitmb
-        self.jobqueue = Queue()
+        self.jobqueue = Queue(self.procs * 4)
         self.resultqueue = Queue()
         self.tasks = []
         self.buffer = []
@@ -278,7 +281,10 @@ class MultiPool(PoolBase):
     def cleanup(self):
         self._clean_temp_dir()
     
-    def finish(self, doccount, lengthfile, termtable, postingwriter):
+    def finish(self, termswriter, doccount, lengthfile):
+        if self.buffer:
+            self._enqueue()
+        
         _fieldlength_totals = self._fieldlength_totals
         if not self.tasks:
             return
@@ -315,9 +321,21 @@ class MultiPool(PoolBase):
         lw.close()
         lengths = lw.reader()
         
+#        if len(runs) >= self.procs * 2:
+#            pool = Pool(self.procs)
+#            tempname = lambda: tempfile.mktemp(suffix=".run", dir=self.dir)
+#            while len(runs) >= self.procs * 2:
+#                runs2 = [(runs[i:i+4], tempname())
+#                         for i in xrange(0, len(runs), 4)]
+#                if len(runs) % 4:
+#                    last = runs2.pop()[0]
+#                    runs2[-1][0].extend(last)
+#                runs = pool.map(merge_runs, runs2)
+#            pool.close()
+        
         iterator = imerge([read_run(runname, count) for runname, count in runs])
         total = sum(count for runname, count in runs)
-        write_postings(self.schema, termtable, lengths, postingwriter, iterator)
+        termswriter.add_iter(iterator, lengths.get)
         for runname, count in runs:
             os.remove(runname)
         

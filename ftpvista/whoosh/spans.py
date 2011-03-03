@@ -32,10 +32,9 @@ For example, to find documents containing "whoosh" at most 5 positions before
 
 """
 
-
 from whoosh.matching import (WrappingMatcher, AndMaybeMatcher, UnionMatcher,
                              IntersectionMatcher, NullMatcher)
-from whoosh.query import And, AndMaybe, Or, Query, Term
+from whoosh.query import Query, And, AndMaybe, Or, Term
 from whoosh.util import make_binary_tree
 
 
@@ -90,7 +89,7 @@ class Span(object):
         """
         
         i = 0
-        while i < len(spans)-1:
+        while i < len(spans) - 1:
             here = spans[i]
             j = i + 1
             while j < len(spans):
@@ -140,7 +139,7 @@ class Span(object):
             return self.start - span.end
 
 
-# 
+# Base matchers
 
 class SpanWrappingMatcher(WrappingMatcher):
     """An abstract matcher class that wraps a "regular" matcher. This matcher
@@ -200,6 +199,16 @@ class SpanWrappingMatcher(WrappingMatcher):
             self.next()
 
 
+class SpanBiMatcher(SpanWrappingMatcher):
+    def copy(self):
+        return self.__class__(self.a.copy(), self.b.copy())
+    
+    def replace(self):
+        if not self.is_active():
+            return NullMatcher()
+        return self
+
+
 # Queries
 
 class SpanQuery(Query):
@@ -222,6 +231,13 @@ class SpanQuery(Query):
     def __repr__(self):
         return "%s(%r)" % (self.__class__.__name__, self.q)
     
+    def __eq__(self, other):
+        return (other and self.__class__ is other.__class__
+                and self.q == other.q)
+        
+    def __hash__(self):
+        return hash(self.__class__.__name__) ^ hash(self.q)
+    
 
 class SpanFirst(SpanQuery):
     """Matches spans that end within the first N positions. This lets you
@@ -238,7 +254,20 @@ class SpanFirst(SpanQuery):
         
         self.q = q
         self.limit = limit
-        
+    
+    def __eq__(self, other):
+        return (other and self.__class__ is other.__class__
+                and self.q == other.q and self.limit == other.limit)
+    
+    def __hash__(self):
+        return hash(self.q) ^ hash(self.limit)
+    
+    def is_leaf(self):
+        return False
+    
+    def apply(self, fn):
+        return self.__class__(fn(self.q), limit=self.limit)
+    
     def matcher(self, searcher):
         return SpanFirst.SpanFirstMatcher(self._subm(searcher),
                                           limit=self.limit)
@@ -312,6 +341,23 @@ class SpanNear(SpanQuery):
                                                             self.q, self.slop,
                                                             self.ordered,
                                                             self.mindist)
+    
+    def __eq__(self, other):
+        return (other and self.__class__ == other.__class__
+                and self.q == other.q and self.slop == other.slop
+                and self.ordered == other.ordered
+                and self.mindist == other.mindist)
+    
+    def __hash__(self):
+        return (hash(self.a) ^ hash(self.b) ^ hash(self.slop)
+                ^ hash(self.ordered) ^ hash(self.mindist))
+    
+    def is_leaf(self):
+        return False
+    
+    def apply(self, fn):
+        return self.__class__(fn(self.a), fn(self.b), slop=self.slop,
+                              ordered=self.ordered, mindist=self.mindist)
     
     def matcher(self, searcher):
         ma = self.a.matcher(searcher)
@@ -388,17 +434,64 @@ class SpanNear(SpanQuery):
             return sorted(spans)
 
 
-class SpanBiMatcher(SpanWrappingMatcher):
-    def copy(self):
-        return self.__class__(self.a.copy(), self.b.copy())
+class SpanOr(SpanQuery):
+    """Matches documents that match any of a list of sub-queries. Unlike
+    query.Or, this class merges together matching spans from the different
+    sub-queries when they overlap.
+    """
     
-    def replace(self):
-        if not self.is_active():
-            return NullMatcher()
-        return self
+    def __init__(self, subqs):
+        """
+        :param subqs: a list of queries to match.
+        """
+        
+        self.q = Or(subqs)
+        self.subqs = subqs
+    
+    def is_leaf(self):
+        return False
+    
+    def apply(self, fn):
+        return self.__class__([fn(sq) for sq in self.subqs])
+    
+    def matcher(self, searcher):
+        matchers = [q.matcher(searcher) for q in self.subqs]
+        return make_binary_tree(SpanOr.SpanOrMatcher, matchers)
+    
+    class SpanOrMatcher(SpanBiMatcher):
+        def __init__(self, a, b):
+            self.a = a
+            self.b = b
+            super(SpanOr.SpanOrMatcher, self).__init__(UnionMatcher(a, b))
+    
+        def _get_spans(self):
+            if self.a.is_active() and self.b.is_active() and self.a.id() == self.b.id():
+                spans = sorted(set(self.a.spans()) | set(self.b.spans()))
+            elif not self.b.is_active() or self.a.id() < self.b.id():
+                spans = self.a.spans()
+            else:
+                spans = self.b.spans()
+            
+            Span.merge(spans)
+            return spans
 
 
-class SpanNot(SpanQuery):
+class SpanBiQuery(SpanQuery):
+    # Intermediate base class for methods common to "a/b" span query types
+
+    def is_leaf(self):
+        return False
+
+    def apply(self, fn):
+        return self.__class__(fn(self.a), fn(self.b))
+    
+    def matcher(self, searcher):
+        ma = self.a.matcher(searcher)
+        mb = self.b.matcher(searcher)
+        return self._Matcher(ma, mb)
+
+
+class SpanNot(SpanBiQuery):
     """Matches spans from the first query only if they don't overlap with
     spans from the second query. If there are no non-overlapping spans, the
     document does not match.
@@ -423,17 +516,12 @@ class SpanNot(SpanQuery):
         self.q = AndMaybe(a, b)
         self.a = a
         self.b = b
-        
-    def matcher(self, searcher):
-        ma = self.a.matcher(searcher)
-        mb = self.b.matcher(searcher)
-        return SpanNot.SpanNotMatcher(ma, mb)
     
-    class SpanNotMatcher(SpanBiMatcher):
+    class _Matcher(SpanBiMatcher):
         def __init__(self, a, b):
             self.a = a
             self.b = b
-            super(SpanNot.SpanNotMatcher, self).__init__(AndMaybeMatcher(a, b))
+            super(SpanNot._Matcher, self).__init__(AndMaybeMatcher(a, b))
         
         def _get_spans(self):
             if self.a.id() == self.b.id():
@@ -452,43 +540,7 @@ class SpanNot(SpanQuery):
                 return self.a.spans()
 
 
-class SpanOr(SpanQuery):
-    """Matches documents that match any of a list of sub-queries. Unlike
-    query.Or, this class merges together matching spans from the different
-    sub-queries when they overlap.
-    """
-    
-    def __init__(self, subqs):
-        """
-        :param subqs: a list of queries to match.
-        """
-        
-        self.q = Or(subqs)
-        self.subqs = subqs
-        
-    def matcher(self, searcher):
-        matchers = [q.matcher(searcher) for q in self.subqs]
-        return make_binary_tree(SpanOr.SpanOrMatcher, matchers)
-    
-    class SpanOrMatcher(SpanBiMatcher):
-        def __init__(self, a, b):
-            self.a = a
-            self.b = b
-            super(SpanOr.SpanOrMatcher, self).__init__(UnionMatcher(a, b))
-    
-        def _get_spans(self):
-            if self.a.is_active() and self.b.is_active() and self.a.id() == self.b.id():
-                spans = sorted(set(self.a.spans()) | set(self.b.spans()))
-            elif not self.b.is_active() or self.a.id() < self.b.id():
-                spans = self.a.spans()
-            else:
-                spans = self.b.spans()
-            
-            Span.merge(spans)
-            return spans
-
-
-class SpanContains(SpanQuery):
+class SpanContains(SpanBiQuery):
     """Matches documents where the spans of the first query contain any spans
     of the second query.
     
@@ -513,17 +565,12 @@ class SpanContains(SpanQuery):
         self.a = a
         self.b = b
     
-    def matcher(self, searcher):
-        ma = self.a.matcher(searcher)
-        mb = self.b.matcher(searcher)
-        return SpanContains.SpanContainsMatcher(ma, mb)
-    
-    class SpanContainsMatcher(SpanBiMatcher):
+    class _Matcher(SpanBiMatcher):
         def __init__(self, a, b):
             self.a = a
             self.b = b
             isect = IntersectionMatcher(a, b)
-            super(SpanContains.SpanContainsMatcher, self).__init__(isect)
+            super(SpanContains._Matcher, self).__init__(isect)
             
         def _get_spans(self):
             spans = []
@@ -541,7 +588,7 @@ class SpanContains(SpanQuery):
             return spans
 
 
-class SpanBefore(SpanQuery):
+class SpanBefore(SpanBiQuery):
     """Matches documents where the spans of the first query occur before any
     spans of the second query.
     
@@ -563,25 +610,20 @@ class SpanBefore(SpanQuery):
         self.a = a
         self.b = b
         self.q = And([a, b])
-        
-    def matcher(self, searcher):
-        ma = self.a.matcher(searcher)
-        mb = self.b.matcher(searcher)
-        return SpanBefore.SpanBeforeMatcher(ma, mb)
-        
-    class SpanBeforeMatcher(SpanBiMatcher):
+    
+    class _Matcher(SpanBiMatcher):
         def __init__(self, a, b):
             self.a = a
             self.b = b
             isect = IntersectionMatcher(a, b)
-            super(SpanBefore.SpanBeforeMatcher, self).__init__(isect)
+            super(SpanBefore._Matcher, self).__init__(isect)
 
         def _get_spans(self):
             bminstart = min(bspan.start for bspan in self.b.spans())
             return [aspan for aspan in self.a.spans() if aspan.end < bminstart]
 
 
-class SpanCondition(SpanQuery):
+class SpanCondition(SpanBiQuery):
     """Matches documents that satisfy both subqueries, but only uses the spans
     from the first subquery.
     
@@ -599,17 +641,12 @@ class SpanCondition(SpanQuery):
         self.a = a
         self.b = b
         self.q = And([a, b])
-        
-    def matcher(self, searcher):
-        ma = self.a.matcher(searcher)
-        mb = self.b.matcher(searcher)
-        return SpanCondition.SpanConditionMatcher(ma, mb)
     
-    class SpanConditionMatcher(SpanBiMatcher):
+    class _Matcher(SpanBiMatcher):
         def __init__(self, a, b):
             self.a = a
             isect = IntersectionMatcher(a, b)
-            super(SpanCondition.SpanConditionMatcher, self).__init__(isect)
+            super(SpanCondition._Matcher, self).__init__(isect)
 
         def _get_spans(self):
             return self.a.spans()

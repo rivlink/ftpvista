@@ -53,13 +53,14 @@ The first item must be a tokenizer and the rest must be filters (you can't put
 a filter first or a tokenizer after the first item).
 """
 
-import copy, re
+import re
 from array import array
 from collections import deque
 from itertools import chain
 
 from whoosh.lang.dmetaphone import double_metaphone
 from whoosh.lang.porter import stem
+from whoosh.util import lru_cache, unbound_cache
 
 
 # Default list of stop words (words so common it's usually wasteful to index
@@ -71,6 +72,20 @@ STOP_WORDS = frozenset(('a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'can',
                         'not', 'of', 'on', 'or', 'tbd', 'that', 'the', 'this',
                         'to', 'us', 'we', 'when', 'will', 'with', 'yet',
                         'you', 'your'))
+
+
+# Pre-configured regular expressions
+
+default_pattern = re.compile(r"\w+(\.?\w+)*", re.UNICODE)
+url_pattern = re.compile("""
+(
+    [A-Za-z+]+://          # URL protocol
+    \\S+?                  # URL body
+    (?=\\s|[.]\\s|$|[.]$)  # Stop at space/end, or a dot followed by space/end
+) | (                      # or...
+    \w+([:.]?\w+)*         # word characters, with optional internal colons/dots
+)
+""", re.VERBOSE | re.UNICODE)
 
 
 # Utility functions
@@ -185,7 +200,7 @@ class IDTokenizer(Tokenizer):
         assert isinstance(value, unicode), "%r is not unicode" % value
         t = Token(positions, chars, removestops=removestops, mode=mode)
         t.text = value
-        t.boost=1.0
+        t.boost = 1.0
         if keeporiginal:
             t.original = value
         if positions:
@@ -207,7 +222,7 @@ class RegexTokenizer(Tokenizer):
     
     __inittypes__ = dict(expression=unicode, gaps=bool)
     
-    def __init__(self, expression=r"\w+(\.?\w+)*", gaps=False):
+    def __init__(self, expression=default_pattern, gaps=False):
         """
         :param expression: A regular expression object or string. Each match
             of the expression equals a token. Group 0 (the entire matched text)
@@ -243,7 +258,7 @@ class RegexTokenizer(Tokenizer):
         :param start_char: The offset of the first character of the first
             token. For example, if you set start_char=2, the text "aaa bbb"
             will have chars (2,5),(6,9) instead (0,3),(4,7).
-        :param tokenize: if True, the text should be tokenized. 
+        :param tokenize: if True, the text should be tokenized.
         """
         
         assert isinstance(value, unicode), "%r is not unicode" % value
@@ -252,7 +267,8 @@ class RegexTokenizer(Tokenizer):
         if not tokenize:
             t.original = t.text = value
             t.boost = 1.0
-            if positions: t.pos = start_pos
+            if positions:
+                t.pos = start_pos
             if chars:
                 t.startchar = start_char
                 t.endchar = start_char + len(value)
@@ -363,7 +379,7 @@ class CharsetTokenizer(Tokenizer):
         :param start_char: The offset of the first character of the first
             token. For example, if you set start_char=2, the text "aaa bbb"
             will have chars (2,5),(6,9) instead (0,3),(4,7).
-        :param tokenize: if True, the text should be tokenized. 
+        :param tokenize: if True, the text should be tokenized.
         """
         
         assert isinstance(value, unicode), "%r is not unicode" % value
@@ -372,7 +388,8 @@ class CharsetTokenizer(Tokenizer):
         if not tokenize:
             t.original = t.text = value
             t.boost = 1.0
-            if positions: t.pos = start_pos
+            if positions:
+                t.pos = start_pos
             if chars:
                 t.startchar = start_char
                 t.endchar = start_char + len(value)
@@ -476,9 +493,8 @@ class NgramTokenizer(Tokenizer):
                 return True
         return False
     
-    def __call__(self, value, positions=False, chars=False,
-                 keeporiginal=False, removestops=True,
-                 start_pos=0, start_char=0, mode='',
+    def __call__(self, value, positions=False, chars=False, keeporiginal=False,
+                 removestops=True, start_pos=0, start_char=0, mode='',
                  **kwargs):
         assert isinstance(value, unicode), "%r is not unicode" % value
         
@@ -490,8 +506,8 @@ class NgramTokenizer(Tokenizer):
             size = min(self.max, inlen)
             for start in xrange(0, inlen - size + 1):
                 end = start + size
-                if end > inlen: continue
-                
+                if end > inlen:
+                    continue
                 t.text = value[start:end]
                 if keeporiginal:
                     t.original = t.text
@@ -507,8 +523,8 @@ class NgramTokenizer(Tokenizer):
             for start in xrange(0, inlen - self.min + 1):
                 for size in xrange(self.min, self.max + 1):
                     end = start + size
-                    if end > inlen: continue
-                    
+                    if end > inlen:
+                        continue
                     t.text = value[start:end]
                     if keeporiginal:
                         t.original = t.text
@@ -521,7 +537,7 @@ class NgramTokenizer(Tokenizer):
                     
                     yield t
                 pos += 1
-                    
+
 
 # Filters
 
@@ -636,7 +652,6 @@ class StripFilter(Filter):
             yield t
 
 
-
 class StopFilter(Filter):
     """Marks "stop" words (words too common to index) in the stream (and by
     default removes them).
@@ -718,63 +733,131 @@ class StemFilter(Filter):
     root word (for example, "rendering", "renders", "rendered", etc.) to a
     single word in the index.
     
-    >>> rext = RegexTokenizer()
-    >>> stream = rext(u"fundamentally willows")
-    >>> stemmer = StemFilter()
-    >>> [token.text for token in stemmer(stream)]
+    >>> stemmer = RegexTokenizer() | StemFilter()
+    >>> [token.text for token in stemmer(u"fundamentally willows")]
     [u"fundament", u"willow"]
+    
+    You can pass your own stemming function to the StemFilter. The default
+    is the Porter stemming algorithm for English.
+    
+    >>> stemfilter = StemFilter(stem_function)
+    
+    By default, this class wraps an LRU cache around the stemming function. The
+    ``cachesize`` keyword argument sets the size of the cache. To make the
+    cache unbounded (the class caches every input), use ``cachesize=-1``. To
+    disable caching, use ``cachesize=None``.
+    
+    If you compile and install the py-stemmer library, the
+    :class:`PyStemmerFilter` provides slightly easier access to the language
+    stemmers in that library.
     """
     
     __inittypes__ = dict(stemfn=object, ignore=list)
     
-    def __init__(self, stemfn=stem, ignore=None):
+    def __init__(self, stemfn=stem, ignore=None, cachesize=50000):
         """
         :param stemfn: the function to use for stemming.
         :param ignore: a set/list of words that should not be stemmed. This is
             converted into a frozenset. If you omit this argument, all tokens
             are stemmed.
+        :param cachesize: the maximum number of words to cache. Use ``-1`` for
+            an unbounded cache, or ``None`` for no caching.
         """
         
         self.stemfn = stemfn
-        self.cache = {}
-        if ignore is None:
-            self.ignores = frozenset()
+        self.ignore = frozenset() if ignore is None else frozenset(ignore)
+        self.cachesize = cachesize
+        # clear() sets the _stem attr to a cached wrapper around self.stemfn
+        self.clear()
+    
+    def __getstate__(self):
+        # Can't pickle a dynamic function, so we have to remove the _stem
+        # attribute from the state
+        return dict([(k, self.__dict__[k]) for k in self.__dict__
+                      if k != "_stem"])
+    
+    def __setstate__(self, state):
+        # Check for old instances of StemFilter class, which didn't have a
+        # cachesize attribute and pickled the cache attribute
+        if "cachesize" not in state:
+            self.cachesize = 50000
+        if "cache" in state:
+            del state["cache"]
+        
+        self.__dict__.update(state)
+        # Set the _stem attribute
+        self.clear()
+    
+    def clear(self):
+        if self.cachesize < 0:
+            self._stem = unbound_cache(self.stemfn)
+        elif self.cachesize > 1:
+            self._stem = lru_cache(self.cachesize)(self.stemfn)
         else:
-            self.ignores = frozenset(ignore)
+            self._stem = self.stemfn
+    
+    def cache_info(self):
+        if self.cachesize <= 1:
+            return None
+        return self._stem.cache_info()
     
     def __eq__(self, other):
-        return (other
-                and self.__class__ is other.__class__
+        return (other and self.__class__ is other.__class__
                 and self.stemfn == other.stemfn)
     
     def __call__(self, tokens):
-        assert hasattr(tokens, "__iter__")
-        stemfn = self.stemfn
-        cache = self.cache
-        ignores = self.ignores
+        stemfn = self._stem
+        ignore = frozenset()
+        if hasattr(self, 'ignore'):
+            ignore = self.ignore
         
         for t in tokens:
-            if t.stopped:
-                yield t
-                continue
-            
-            text = t.text
-            if text in ignores:
-                yield t
-            elif text in cache:
-                t.text = cache[text]
-                yield t
-            else:
-                t.text = s = stemfn(text)
-                cache[text] = s
-                yield t
-                
-    def clean(self):
-        """This filter memoizes previously stemmed words to greatly speed up
-        stemming. This method clears the cache of previously stemmed words.
-        """
-        self.cache.clear()
+            if not t.stopped:
+                text = t.text
+                if text not in ignore:
+                    t.text = stemfn(text)
+            yield t
 
+
+class PyStemmerFilter(StemFilter):
+    """This is a simple sublcass of StemFilter that works with the py-stemmer
+    third-party library. You must have the py-stemmer library installed to use
+    this filter.
+    
+    >>> PyStemmerFilter("spanish")
+    """
+    
+    def __init__(self, lang="english", ignore=None, cachesize=10000):
+        """
+        :param lang: a string identifying the stemming algorithm to use. You
+            can get a list of available algorithms by with the
+            :meth:`PyStemmerFilter.algorithms` method. The identification
+            strings are directly from the py-stemmer library.
+        :param ignore: a set/list of words that should not be stemmed. This is
+            converted into a frozenset. If you omit this argument, all tokens
+            are stemmed.
+        :param cachesize: the maximum number of words to cache.
+        """
+        
+        import Stemmer
+        
+        stemmer = Stemmer.Stemmer(lang)
+        stemmer.maxCacheSize = cachesize
+        self._stem = stemmer.stemWord
+        self.ignore = frozenset() if ignore is None else frozenset(ignore)
+        
+    def algorithms(self):
+        """Returns a list of stemming algorithms provided by the py-stemmer
+        library.
+        """
+        
+        import Stemmer
+        
+        return Stemmer.algorithms()
+    
+    def cache_info(self):
+        return None
+        
 
 class CharsetFilter(Filter):
     """Translates the text of tokens by calling unicode.translate() using the
@@ -789,8 +872,9 @@ class CharsetFilter(Filter):
     >>> [t.text for t in chfilter(retokenizer(u'café'))]
     [u'cafe']
     
-    Another way to get a character mapping object is to convert a Sphinx charset
-    table file using :func:`whoosh.support.charset.charset_table_to_dict`.
+    Another way to get a character mapping object is to convert a Sphinx
+    charset table file using
+    :func:`whoosh.support.charset.charset_table_to_dict`.
     
     >>> from whoosh.support.charset import charset_table_to_dict, default_charset
     >>> retokenizer = RegexTokenizer()
@@ -883,13 +967,13 @@ class NgramFilter(Filter):
                         t.endchar = startchar + size
                     yield t
                 elif at == 1:
-                    t.text = text[0-size:]
+                    t.text = text[0 - size:]
                     if chars:
                         t.startchar = t.endchar - size
                     yield t
                 else:
                     for start in xrange(0, len(text) - size + 1):
-                        t.text = text[start:start+size]
+                        t.text = text[start:start + size]
                         if chars:
                             t.startchar = startchar + start
                             t.endchar = startchar + start + size
@@ -904,7 +988,7 @@ class NgramFilter(Filter):
                         yield t
                         
                 elif at == 1:
-                    start = max(0, len(text)-self.max)
+                    start = max(0, len(text) - self.max)
                     for i in xrange(start, len(text) - self.min + 1):
                         t.text = text[i:]
                         if chars:
@@ -914,7 +998,8 @@ class NgramFilter(Filter):
                     for start in xrange(0, len(text) - self.min + 1):
                         for size in xrange(self.min, self.max + 1):
                             end = start + size
-                            if end > len(text): continue
+                            if end > len(text):
+                                continue
                             
                             t.text = text[start:end]
                             
@@ -984,9 +1069,12 @@ class IntraWordFilter(Filter):
     lowers = array("u")
     for n in xrange(2 ** 16 - 1):
         ch = unichr(n)
-        if ch.islower(): lowers.append(ch)
-        elif ch.isupper(): uppers.append(ch)
-        elif ch.isdigit(): digits.append(ch)
+        if ch.islower():
+            lowers.append(ch)
+        elif ch.isupper():
+            uppers.append(ch)
+        elif ch.isdigit():
+            digits.append(ch)
     
     # Create escaped strings of characters for use in regular expressions
     digits = re.escape("".join(digits))
@@ -1080,8 +1168,10 @@ class IntraWordFilter(Filter):
         buf = []
         for pos, part in parts[:]:
             # Set the type of this part
-            if part.isalpha(): this = 1
-            elif part.isdigit(): this = 2
+            if part.isalpha():
+                this = 1
+            elif part.isdigit():
+                this = 2
             
             # Is this the same type as the previous part?
             if buf and (this == last == 1 and mergewords)\
@@ -1203,16 +1293,20 @@ class BiWordFilter(Filter):
             
             # Save the original position
             positions = token.positions
-            if positions: ps = token.pos
+            if positions:
+                ps = token.pos
             
             # Save the original start char
             chars = token.chars
-            if chars: sc = token.startchar
+            if chars:
+                sc = token.startchar
             
             if prev_text is not None:
                 # Use the pos and startchar from the previous token
-                if positions: token.pos = prev_pos
-                if chars: token.startchar = prev_startchar
+                if positions:
+                    token.pos = prev_pos
+                if chars:
+                    token.startchar = prev_startchar
                 
                 # Join the previous token text and the current token text to
                 # form the biword token
@@ -1222,8 +1316,10 @@ class BiWordFilter(Filter):
             
             # Save the originals and the new "previous" values
             prev_text = text
-            if chars: prev_startchar = sc
-            if positions: prev_pos = ps
+            if chars:
+                prev_startchar = sc
+            if positions:
+                prev_pos = ps
         
         # If no bi-words were emitted, that is, the token stream only had
         # a single token, then emit that single token.
@@ -1378,7 +1474,7 @@ class DelimitedAttributeFilter(Filter):
             text = t.text
             pos = text.find(delim)
             if pos > -1:
-                setattr(t, attr, typ(text[pos+1:]))
+                setattr(t, attr, typ(text[pos + 1:]))
                 t.text = text[:pos]
             else:
                 setattr(t, attr, default)
@@ -1578,7 +1674,7 @@ def RegexAnalyzer(expression=r"\w+(\.?\w+)*", gaps=False):
 RegexAnalyzer.__inittypes__ = dict(expression=unicode, gaps=bool)
 
 
-def SimpleAnalyzer(expression=r"\w+(\.?\w+)*", gaps=False):
+def SimpleAnalyzer(expression=default_pattern, gaps=False):
     """Composes a RegexTokenizer with a LowercaseFilter.
     
     >>> ana = SimpleAnalyzer()
@@ -1593,7 +1689,8 @@ def SimpleAnalyzer(expression=r"\w+(\.?\w+)*", gaps=False):
     return RegexTokenizer(expression=expression, gaps=gaps) | LowercaseFilter()
 SimpleAnalyzer.__inittypes__ = dict(expression=unicode, gaps=bool)
 
-def StandardAnalyzer(expression=r"\w+(\.?\w+)*", stoplist=STOP_WORDS,
+
+def StandardAnalyzer(expression=default_pattern, stoplist=STOP_WORDS,
                      minsize=2, maxsize=None, gaps=False):
     """Composes a RegexTokenizer with a LowercaseFilter and optional
     StopFilter.
@@ -1621,9 +1718,9 @@ StandardAnalyzer.__inittypes__ = dict(expression=unicode, gaps=bool,
                                       stoplist=list, minsize=int, maxsize=int)
 
 
-def StemmingAnalyzer(expression=r"\w+(\.?\w+)*", stoplist=STOP_WORDS,
+def StemmingAnalyzer(expression=default_pattern, stoplist=STOP_WORDS,
                      minsize=2, maxsize=None, gaps=False, stemfn=stem,
-                     ignore=None):
+                     ignore=None, cachesize=50000):
     """Composes a RegexTokenizer with a lower case filter, an optional stop
     filter, and a stemming filter.
     
@@ -1638,6 +1735,10 @@ def StemmingAnalyzer(expression=r"\w+(\.?\w+)*", stoplist=STOP_WORDS,
     :param maxsize: Words longer that this are removed from the stream.
     :param gaps: If True, the tokenizer *splits* on the expression, rather
         than matching on the expression.
+    :param ignore: a set of words to not stem.
+    :param cachesize: the maximum number of stemmed words to cache. The larger
+        this number, the faster stemming will be but the more memory it will
+        use.
     """
     
     ret = RegexTokenizer(expression=expression, gaps=gaps)
@@ -1645,7 +1746,7 @@ def StemmingAnalyzer(expression=r"\w+(\.?\w+)*", stoplist=STOP_WORDS,
     if stoplist is not None:
         chain = chain | StopFilter(stoplist=stoplist, minsize=minsize,
                                    maxsize=maxsize)
-    return chain | StemFilter(stemfn=stemfn, ignore=ignore)
+    return chain | StemFilter(stemfn=stemfn, ignore=ignore, cachesize=cachesize)
 StemmingAnalyzer.__inittypes__ = dict(expression=unicode, gaps=bool,
                                       stoplist=list, minsize=int, maxsize=int)
 

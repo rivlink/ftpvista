@@ -18,12 +18,11 @@
 """
 
 from bisect import bisect_right
-from collections import defaultdict
 from heapq import heapify, heapreplace, heappop, nlargest
 
-from whoosh.fields import UnknownFieldError
 from whoosh.util import ClosableMixin
 from whoosh.matching import MultiMatcher
+
 
 # Exceptions
 
@@ -37,7 +36,8 @@ class IndexReader(ClosableMixin):
     """Do not instantiate this object directly. Instead use Index.reader().
     """
 
-    is_atomic = True
+    def is_atomic(self):
+        return True
 
     def __contains__(self, term):
         """Returns True if the given term tuple (fieldname, text) is
@@ -202,27 +202,15 @@ class IndexReader(ClosableMixin):
         """
         raise NotImplementedError
 
-    def first_ids(self, fieldname):
-        """Yields a series of (text, docid) tuples for the terms in the given
-        field. This may be optimized in certain backends to be much faster than
-        iterating on the field and reading the first item from each posting
-        list.
-        
-        Taking the first doc ID for each term in a field is often useful when
-        working with fields of unique identifier values, where you know each
-        term should only have one doc ID in the posting list.
-        """
-        
-        for text in self.lexicon(fieldname):
-            yield (text, self.first_id(fieldname, text))
-
     def first_id(self, fieldname, text):
         """Returns the first ID in the posting list for the given term. This
         may be optimized in certain backends.
         """
         
         p = self.postings(fieldname, text)
-        return p.id()
+        if p.is_active():
+            return p.id()
+        raise TermNotFound((fieldname, text))
 
     def postings(self, fieldname, text, scorer=None):
         """Returns a :class:`~whoosh.matching.Matcher` for the postings of the
@@ -377,11 +365,13 @@ class IndexReader(ClosableMixin):
         
         if counts:
             for key, docnum in gen:
-                if key not in groups: groups[key] = 0
+                if key not in groups:
+                    groups[key] = 0
                 groups[key] += 1
         else:
             for key, docnum in gen:
-                if key not in groups: groups[key] = []
+                if key not in groups:
+                    groups[key] = []
                 groups[key].append(docnum)
                 
     def define_facets(self, name, doclists, save=False):
@@ -396,6 +386,12 @@ class IndexReader(ClosableMixin):
         """
         
         raise NotImplementedError
+    
+    def set_caching_policy(self, *args, **kwargs):
+        """Sets the field caching policy for this reader.
+        """
+        
+        pass
         
 
 # Fake IndexReader class for empty indexes
@@ -480,7 +476,8 @@ class MultiReader(IndexReader):
     """Do not instantiate this object directly. Instead use Index.reader().
     """
 
-    is_atomic = False
+    def is_atomic(self):
+        return False
 
     def __init__(self, readers, generation=-1):
         self.readers = readers
@@ -490,10 +487,10 @@ class MultiReader(IndexReader):
             self.schema = readers[0].schema
         
         self.doc_offsets = []
-        base = 0
+        self.base = 0
         for r in self.readers:
-            self.doc_offsets.append(base)
-            base += r.doc_count_all()
+            self.doc_offsets.append(self.base)
+            self.base += r.doc_count_all()
         
         self.is_closed = False
 
@@ -546,6 +543,11 @@ class MultiReader(IndexReader):
 
             # Yield the term with the summed doc frequency and term count.
             yield (fnum, text, docfreq, termcount)
+
+    def add_reader(self, reader):
+        self.readers.append(reader)
+        self.doc_offsets.append(self.base)
+        self.base += reader.doc_count_all()
 
     def close(self):
         for d in self.readers:
@@ -601,9 +603,15 @@ class MultiReader(IndexReader):
         for i, r in enumerate(self.readers):
             try:
                 id = r.first_id(fieldname, text)
-                return self.doc_offsets[i] + id
             except (KeyError, TermNotFound):
                 pass
+            else:
+                if id is None:
+                    raise TermNotFound((fieldname, text))
+                else:
+                    return self.doc_offsets[i] + id
+        
+        raise TermNotFound((fieldname, text))
 
     def postings(self, fieldname, text, scorer=None):
         postreaders = []
@@ -660,10 +668,11 @@ class MultiReader(IndexReader):
     def leaf_readers(self):
         return zip(self.readers, self.doc_offsets)
 
-    
+    def set_caching_policy(self, *args, **kwargs):
+        for r in self.readers:
+            r.set_caching_policy(*args, **kwargs)
 
-
-
+        
 
 
 

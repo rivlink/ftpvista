@@ -14,13 +14,23 @@
 # limitations under the License.
 #===============================================================================
 
-import errno, os, time
+"""
+This module contains classes implementing exclusive locks for platforms with
+fcntl (UNIX and Mac OS X) and Windows. Whoosh originally used directory creation
+as a locking method, but it had the problem that if the program crashed the
+lock directory was left behind and would keep the index locked until it was
+cleaned up. Using OS-level file locks fixes this.
+"""
+
+import errno
+import os
+import time
 
 
 def try_for(fn, timeout=5.0, delay=0.1):
     """Calls ``fn`` every ``delay`` seconds until it returns True or ``timeout``
-    seconds elapse. Returns True if the lock was acquired, or False if the timeout
-    was reached.
+    seconds elapse. Returns True if the lock was acquired, or False if the
+    timeout was reached.
 
     :param timeout: Length of time (in seconds) to keep retrying to acquire the
         lock. 0 means return immediately. Only used when blocking is False.
@@ -76,7 +86,8 @@ class FcntlLock(LockBase):
         self.fd = os.open(self.filename, flags)
         
         mode = fcntl.LOCK_EX
-        if not blocking: mode |= fcntl.LOCK_NB
+        if not blocking:
+            mode |= fcntl.LOCK_NB
         
         try:
             fcntl.flock(self.fd, mode)
@@ -105,7 +116,8 @@ class MsvcrtLock(LockBase):
         
         flags = os.O_CREAT | os.O_WRONLY
         mode = msvcrt.LK_NBLCK
-        if blocking: mode = msvcrt.LK_LOCK
+        if blocking:
+            mode = msvcrt.LK_LOCK
             
         self.fd = os.open(self.filename, flags)
         try:

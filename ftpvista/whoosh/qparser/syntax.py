@@ -21,6 +21,8 @@ tranlsated into a query tree by calling ``SyntaxObject.query()`` on the object
 at the top of the tree.
 """
 
+import copy
+
 from whoosh import query
 from whoosh.qparser.common import rcompile
 
@@ -45,6 +47,28 @@ class SyntaxObject(object):
         syntax objects that didn't have an explicit field name set by the user.
         """
         
+        if force or self.fieldname is None:
+            t = copy.copy(self)
+            t.fieldname = name
+            return t
+        else:
+            return self
+        
+    def set_boost(self, b):
+        if b != self.boost:
+            t = copy.copy(self)
+            t.boost = b
+            return t
+        else:
+            return self
+        
+    def set_text(self, text):
+        raise NotImplementedError
+    
+    def prepend_text(self, text):
+        raise NotImplementedError
+    
+    def append_text(self, text):
         raise NotImplementedError
     
     def query(self, parser):
@@ -116,6 +140,9 @@ class Group(SyntaxObject):
     def pop(self):
         return self.tokens.pop()
     
+    def reverse(self):
+        self.tokens.reverse()
+    
     def query(self, parser):
         return self.qclass([t.query(parser) for t in self.tokens],
                            boost=self.boost)
@@ -151,6 +178,7 @@ class AndNotGroup(Group):
         return query.AndNot(self.tokens[0].query(parser),
                             self.tokens[1].query(parser), boost=self.boost)
     
+
 class AndMaybeGroup(Group):
     """Syntax group corresponding to an AndMaybe query.
     """
@@ -160,6 +188,7 @@ class AndMaybeGroup(Group):
         return query.AndMaybe(self.tokens[0].query(parser),
                               self.tokens[1].query(parser), boost=self.boost)
 
+
 class RequireGroup(Group):
     """Syntax group corresponding to a Require query.
     """
@@ -167,7 +196,8 @@ class RequireGroup(Group):
     def query(self, parser):
         assert len(self.tokens) == 2, self.tokens
         return query.Require(self.tokens[0].query(parser),
-                             self.tokens[1].query(parser), boost = self.boost)
+                             self.tokens[1].query(parser), boost=self.boost)
+
 
 class OrderedGroup(Group):
     """Syntax group corresponding to the Ordered query.
@@ -175,6 +205,7 @@ class OrderedGroup(Group):
     
     many = True
     qclass = query.Ordered
+
 
 class DisMaxGroup(Group):
     """Syntax group corresponding to a DisjunctionMax query.
@@ -228,12 +259,6 @@ class Token(SyntaxObject):
     fieldname = None
     endpos = None
     
-    def set_boost(self, b):
-        return self
-    
-    def set_fieldname(self, name, force=False):
-        return self
-    
     @classmethod
     def match(cls, text, pos):
         return cls.expr.match(text, pos)
@@ -270,6 +295,12 @@ class Operator(Token):
     def __repr__(self):
         return "%s<%s>" % (self.__class__.__name__, self.expr.pattern)
     
+    def set_boost(self, b):
+        return self
+    
+    def set_fieldname(self, name, force=False):
+        return self
+    
     def make_group(self, parser, stream, position):
         raise NotImplementedError
     
@@ -278,6 +309,7 @@ class Operator(Token):
     
     def create(self, parser, match):
         return self
+    
     
 class PrefixOperator(Operator):
     """Implements a prefix operator. That is, the token immediately following
@@ -292,6 +324,7 @@ class PrefixOperator(Operator):
             del stream[position]
         return position
     
+    
 class PostfixOperator(Operator):
     """Implements a postfix operator. That is, the token immediately preceding
     the operator will be put into the group.
@@ -304,6 +337,7 @@ class PostfixOperator(Operator):
         else:
             del stream[position]
         return position
+
 
 class InfixOperator(Operator):
     """Implements an infix operator. That is, the tokens immediately on either
@@ -358,6 +392,12 @@ class Singleton(Token):
     def __repr__(self):
         return self.__class__.__name__
     
+    def set_boost(self, b):
+        return self
+    
+    def set_fieldname(self, name, force=False):
+        return self
+    
     @classmethod
     def create(cls, parser, match):
         if not cls.me:
@@ -410,14 +450,16 @@ class BasicSyntax(Token):
         self.text = text
         self.boost = boost
     
-    def set_boost(self, b):
-        return self.__class__(self.text, fieldname=self.fieldname, boost=b)
+    def set_text(self, text):
+        t = copy.copy(self)
+        t.text = text
+        return t
     
-    def set_fieldname(self, name, force=False):
-        if force or self.fieldname is None:
-            return self.__class__(self.text, fieldname=name, boost=self.boost)
-        else:
-            return self
+    def prepend_text(self, text):
+        return self.set_text(text + self.text)
+    
+    def append_text(self, text):
+        return self.set_text(self.text + text)
     
     def __repr__(self):
         r = "%s:%r" % (self.fieldname, self.text)

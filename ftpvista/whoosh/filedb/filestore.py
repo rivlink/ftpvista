@@ -24,7 +24,8 @@ from whoosh.support.filelock import FileLock
 from whoosh.filedb.structfile import StructFile
 
 
-class ReadOnlyError(Exception): pass
+class ReadOnlyError(Exception):
+    pass
 
 
 class FileStorage(Storage):
@@ -40,9 +41,6 @@ class FileStorage(Storage):
         if not os.path.exists(path):
             raise IOError("Directory %s does not exist" % path)
 
-    def __iter__(self):
-        return iter(self.list())
-
     def create_index(self, schema, indexname=_DEF_INDEX_NAME):
         if self.readonly:
             raise ReadOnlyError
@@ -55,12 +53,21 @@ class FileStorage(Storage):
         from whoosh.filedb.fileindex import FileIndex
         return FileIndex(self, schema=schema, indexname=indexname)
 
-    def create_file(self, name, **kwargs):
+    def create_file(self, name, excl=False, mode="wb", **kwargs):
         if self.readonly:
             raise ReadOnlyError
         
-        f = StructFile(open(self._fpath(name), "wb"), name=name,
-                       mapped=self.mapped, **kwargs)
+        path = self._fpath(name)
+        if excl:
+            flags = os.O_CREAT | os.O_EXCL | os.O_RDWR
+            if hasattr(os, "O_BINARY"):
+                flags |= os.O_BINARY
+            fd = os.open(path, flags)
+            fileobj = os.fdopen(fd, mode)
+        else:
+            fileobj = open(path, mode)
+        
+        f = StructFile(fileobj, name=name, mapped=self.mapped, **kwargs)
         return f
 
     def open_file(self, name, *args, **kwargs):
@@ -93,8 +100,10 @@ class FileStorage(Storage):
 
     def file_exists(self, name):
         return os.path.exists(self._fpath(name))
+    
     def file_modified(self, name):
         return os.path.getmtime(self._fpath(name))
+    
     def file_length(self, name):
         return os.path.getsize(self._fpath(name))
 
@@ -124,9 +133,6 @@ class RamStorage(FileStorage):
         self.files = {}
         self.locks = {}
         self.folder = ''
-
-    def __iter__(self):
-        return iter(self.list())
 
     def list(self):
         return self.files.keys()
@@ -183,8 +189,7 @@ def copy_to_ram(storage):
     :rtype: :class:`RamStorage`
     """
 
-    import shutil #, time
-    #t = time.time()
+    import shutil
     ram = RamStorage()
     for name in storage.list():
         f = storage.open_file(name)
@@ -192,7 +197,6 @@ def copy_to_ram(storage):
         shutil.copyfileobj(f.file, r.file)
         f.close()
         r.close()
-    #print time.time() - t, "to load index into ram"
     return ram
 
 

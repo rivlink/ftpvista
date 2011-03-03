@@ -14,7 +14,6 @@
 # limitations under the License.
 #===============================================================================
 
-from bisect import bisect_left, bisect_right, insort
 from itertools import izip, repeat
 
 
@@ -211,7 +210,7 @@ class Matcher(object):
         minimum quality value.
         """
         
-        raise NotImplementedError
+        raise NotImplementedError(self.__class__.__name__)
     
     def next(self):
         """Moves this matcher to the next posting.
@@ -229,7 +228,7 @@ class Matcher(object):
         """Returns the score of the current posting.
         """
         
-        raise NotImplementedError
+        raise NotImplementedError(self.__class__.__name__)
     
 
 class NullMatcher(Matcher):
@@ -283,10 +282,11 @@ class ListMatcher(Matcher):
     
     def copy(self):
         return self.__class__(self._ids, self._weights, self._values,
-                              self._format, self._scorer, self._i)
+                              self._format, self._scorer, self._i,
+                              self._all_weights, self._maxwol, self._minlength)
     
     def supports_quality(self):
-        return self._scorer is not None
+        return self._scorer is not None and self._scorer.supports_quality()
     
     def quality(self):
         return self._scorer.quality(self)
@@ -295,9 +295,9 @@ class ListMatcher(Matcher):
         return self._scorer.block_quality(self)
     
     def skip_to_quality(self, minquality):
-        # TODO: Skip to the next posting with quality > minquality
-        self._i = len(self._ids)
-        return 0
+        self._i += 1
+        while self._i < len(self._ids) and self.quality() <= minquality:
+            self._i += 1
     
     def id(self):
         return self._ids[self._i]
@@ -427,7 +427,7 @@ class WrappingMatcher(Matcher):
         return self.child.supports_quality()
     
     def skip_to_quality(self, minquality):
-        return self.child.skip_to_quality(minquality/self.boost)
+        return self.child.skip_to_quality(minquality / self.boost)
     
     def quality(self):
         return self.child.quality() * self.boost
@@ -472,8 +472,8 @@ class MultiMatcher(Matcher):
             self.current += 1
         
     def copy(self):
-        return self.__class__([mr.copy() for mr in self.matchers[self.current:]],
-                              self.offsets[self.current:], current=self.current)
+        return self.__class__([mr.copy() for mr in self.matchers],
+                              self.offsets, current=self.current)
     
     def depth(self):
         if self.is_active():
@@ -512,15 +512,18 @@ class MultiMatcher(Matcher):
         return self.matchers[self.current].value_as(astype)
     
     def next(self):
-        if not self.is_active(): raise ReadTooFar
+        if not self.is_active():
+            raise ReadTooFar
         
         self.matchers[self.current].next()
         if not self.matchers[self.current].is_active():
             self._next_matcher()
         
     def skip_to(self, id):
-        if not self.is_active(): raise ReadTooFar
-        if id <= self.id(): return
+        if not self.is_active():
+            raise ReadTooFar
+        if id <= self.id():
+            return
         
         matchers = self.matchers
         offsets = self.offsets
@@ -556,6 +559,7 @@ class MultiMatcher(Matcher):
 def ExcludeMatcher(child, excluded, boost=1.0):
     return FilterMatcher(child, excluded, exclude=True, boost=boost)
 
+
 class FilterMatcher(WrappingMatcher):
     """Filters the postings from the wrapped based on whether the IDs are
     present in or absent from a set.
@@ -582,7 +586,8 @@ class FilterMatcher(WrappingMatcher):
                                              self._exclude, self.boost)
     
     def copy(self):
-        return self.__class__(self.child.copy(), self._ids, self._exclude, boost=self.boost)
+        return self.__class__(self.child.copy(), self._ids, self._exclude,
+                              boost=self.boost)
     
     def _replacement(self, newchild):
         return self.__class__(newchild, self._ids, exclude=self._exclude, boost=self.boost)
@@ -641,9 +646,10 @@ class BiMatcher(Matcher):
 
     def depth(self):
         return 1 + max(self.a.depth(), self.b.depth())
-
+    
     def skip_to(self, id):
-        if not self.is_active(): raise ReadTooFar
+        if not self.is_active():
+            raise ReadTooFar
         ra = self.a.skip_to(id)
         rb = self.b.skip_to(id)
         return ra or rb
@@ -662,14 +668,18 @@ class AdditiveBiMatcher(BiMatcher):
     
     def quality(self):
         q = 0.0
-        if self.a.is_active(): q += self.a.quality()
-        if self.b.is_active(): q += self.b.quality()
+        if self.a.is_active():
+            q += self.a.quality()
+        if self.b.is_active():
+            q += self.b.quality()
         return q
     
     def block_quality(self):
         bq = 0.0
-        if self.a.is_active(): bq += self.a.block_quality()
-        if self.b.is_active(): bq += self.b.block_quality()
+        if self.a.is_active():
+            bq += self.a.block_quality()
+        if self.b.is_active():
+            bq += self.b.block_quality()
         return bq
     
     def weight(self):
@@ -689,7 +699,8 @@ class UnionMatcher(AdditiveBiMatcher):
         
         a_active = a.is_active()
         b_active = b.is_active()
-        if not (a_active or b_active): return NullMatcher()
+        if not (a_active or b_active):
+            return NullMatcher()
         if not a_active:
             return b
         if not b_active:
@@ -715,8 +726,10 @@ class UnionMatcher(AdditiveBiMatcher):
     def id(self):
         a = self.a
         b = self.b
-        if not a.is_active(): return b.id()
-        if not b.is_active(): return a.id()
+        if not a.is_active():
+            return b.id()
+        if not b.is_active():
+            return a.id()
         return min(a.id(), b.id())
     
     # Using sets is faster in most cases, but could potentially use a lot of
@@ -743,13 +756,17 @@ class UnionMatcher(AdditiveBiMatcher):
         ar = br = None
         
         # After all that, here's the actual implementation
-        if a_id <= b_id: ar = a.next()
-        if b_id <= a_id: br = b.next()
+        if a_id <= b_id:
+            ar = a.next()
+        if b_id <= a_id:
+            br = b.next()
         return ar or br
     
     def spans(self):
-        if not self.a.is_active(): return self.b.spans()
-        if not self.b.is_active(): return self.a.spans()
+        if not self.a.is_active():
+            return self.b.spans()
+        if not self.b.is_active():
+            return self.a.spans()
         
         id_a = self.a.id()
         id_b = self.b.id()
@@ -760,12 +777,32 @@ class UnionMatcher(AdditiveBiMatcher):
         else:
             return sorted(set(self.a.spans()) | set(self.b.spans()))
     
+    def weight(self):
+        a = self.a
+        b = self.b
+        
+        if not a.is_active():
+            return b.weight()
+        if not b.is_active():
+            return a.weight()
+        
+        id_a = a.id()
+        id_b = b.id()
+        if id_a < id_b:
+            return a.weight()
+        elif id_b < id_a:
+            return b.weight()
+        else:
+            return (a.weight() + b.weight())
+    
     def score(self):
         a = self.a
         b = self.b
         
-        if not a.is_active(): return b.score()
-        if not b.is_active(): return a.score()
+        if not a.is_active():
+            return b.score()
+        if not b.is_active():
+            return a.score()
         
         id_a = a.id()
         id_b = b.id()
@@ -823,7 +860,12 @@ class DisjunctionMaxMatcher(UnionMatcher):
                               tiebreak=self.tiebreak)
     
     def score(self):
-        return max(self.a.score(), self.b.score())
+        if not self.a.is_active():
+            return self.b.score()
+        elif not self.b.is_active():
+            return self.a.score()
+        else:
+            return max(self.a.score(), self.b.score())
     
     def quality(self):
         return max(self.a.quality(), self.b.quality())
@@ -873,7 +915,8 @@ class IntersectionMatcher(AdditiveBiMatcher):
         
         a_active = a
         b_active = b.is_active()
-        if not (a_active and b_active): return NullMatcher()
+        if not (a_active and b_active):
+            return NullMatcher()
         
         if a is not self.a or b is not self.b:
             return self.__class__(a, b)
@@ -893,12 +936,14 @@ class IntersectionMatcher(AdditiveBiMatcher):
         while a.is_active() and b.is_active() and a_id != b_id:
             if a_id < b_id:
                 ra = a.skip_to(b_id)
-                if not a.is_active(): return
+                if not a.is_active():
+                    return
                 r = r or ra
                 a_id = a.id()
             else:
                 rb = b.skip_to(a_id)
-                if not b.is_active(): return
+                if not b.is_active():
+                    return
                 r = r or rb
                 b_id = b.id()
         return r
@@ -912,7 +957,8 @@ class IntersectionMatcher(AdditiveBiMatcher):
         return iter(sorted(set(self.a.all_ids()) & set(self.b.all_ids())))
     
     def skip_to(self, id):
-        if not self.is_active(): raise ReadTooFar
+        if not self.is_active():
+            raise ReadTooFar
         ra = self.a.skip_to(id)
         rb = self.b.skip_to(id)
         if self.is_active():
@@ -941,7 +987,8 @@ class IntersectionMatcher(AdditiveBiMatcher):
         return skipped
     
     def next(self):
-        if not self.is_active(): raise ReadTooFar
+        if not self.is_active():
+            raise ReadTooFar
         
         # We must assume that the ids are equal whenever next() is called (they
         # should have been made equal by _find_next), so advance them both
@@ -972,7 +1019,8 @@ class AndNotMatcher(BiMatcher):
     def _find_next(self):
         pos = self.a
         neg = self.b
-        if not neg.is_active(): return
+        if not neg.is_active():
+            return
         pos_id = pos.id()
         r = False
         
@@ -991,8 +1039,10 @@ class AndNotMatcher(BiMatcher):
         return r
     
     def replace(self):
-        if not self.a.is_active(): return NullMatcher()
-        if not self.b.is_active(): return self.a
+        if not self.a.is_active():
+            return NullMatcher()
+        if not self.b.is_active():
+            return self.a.replace()
         return self
     
     def quality(self):
@@ -1013,7 +1063,8 @@ class AndNotMatcher(BiMatcher):
         return iter(sorted(set(self.a.all_ids()) - set(self.b.all_ids())))
     
     def next(self):
-        if not self.a.is_active(): raise ReadTooFar
+        if not self.a.is_active():
+            raise ReadTooFar
         ar = self.a.next()
         nr = False
         if self.b.is_active():
@@ -1021,8 +1072,10 @@ class AndNotMatcher(BiMatcher):
         return ar or nr
         
     def skip_to(self, id):
-        if not self.a.is_active(): raise ReadTooFar
-        if id < self.a.id(): return
+        if not self.a.is_active():
+            raise ReadTooFar
+        if id < self.a.id():
+            return
         
         self.a.skip_to(id)
         if self.b.is_active():
@@ -1105,13 +1158,16 @@ class InverseMatcher(WrappingMatcher):
                 if id not in negs and not missing(id))
     
     def next(self):
-        if self._id >= self.limit: raise ReadTooFar
+        if self._id >= self.limit:
+            raise ReadTooFar
         self._id += 1
         self._find_next()
         
     def skip_to(self, id):
-        if self._id >= self.limit: raise ReadTooFar
-        if id < self._id: return
+        if self._id >= self.limit:
+            raise ReadTooFar
+        if id < self._id:
+            return
         self._id = id
         self._find_next()
     
@@ -1136,7 +1192,8 @@ class RequireMatcher(WrappingMatcher):
         return self.__class__(self.a.copy(), self.b.copy())
     
     def replace(self):
-        if not self.child.is_active(): return NullMatcher()
+        if not self.child.is_active():
+            return NullMatcher()
         return self
     
     def quality(self):
@@ -1185,7 +1242,8 @@ class AndMaybeMatcher(AdditiveBiMatcher):
         return self.a.id()
     
     def next(self):
-        if not self.a.is_active(): raise ReadTooFar
+        if not self.a.is_active():
+            raise ReadTooFar
         
         ar = self.a.next()
         br = False
@@ -1194,7 +1252,8 @@ class AndMaybeMatcher(AdditiveBiMatcher):
         return ar or br
     
     def skip_to(self, id):
-        if not self.a.is_active(): raise ReadTooFar
+        if not self.a.is_active():
+            raise ReadTooFar
         
         ra = self.a.skip_to(id)
         rb = False
@@ -1205,8 +1264,10 @@ class AndMaybeMatcher(AdditiveBiMatcher):
     def replace(self):
         ar = self.a.replace()
         br = self.b.replace()
-        if not ar.is_active(): return NullMatcher()
-        if not br.is_active(): return ar
+        if not ar.is_active():
+            return NullMatcher()
+        if not br.is_active():
+            return ar
         if ar is not self.a or br is not self.b:
             return self.__class__(ar, br)
         return self
@@ -1216,7 +1277,8 @@ class AndMaybeMatcher(AdditiveBiMatcher):
         b = self.b
         minquality = minquality
         
-        if not a.is_active(): raise ReadTooFar
+        if not a.is_active():
+            raise ReadTooFar
         if not b.is_active():
             return a.skip_to_quality(minquality)
         
@@ -1275,7 +1337,6 @@ class ConstantScoreMatcher(WrappingMatcher):
     def score(self):
         return self._score
     
-
 
 #class PhraseMatcher(WrappingMatcher):
 #    """Matches postings where a list of sub-matchers occur next to each other

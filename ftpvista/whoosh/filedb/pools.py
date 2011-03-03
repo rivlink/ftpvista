@@ -15,159 +15,127 @@
 # limitations under the License.
 #===============================================================================
 
-import os, tempfile
+from __future__ import with_statement
+import os
+import tempfile
 from array import array
 from collections import defaultdict
-from heapq import heapify, heappush, heappop
+from heapq import heapify, heappop, heapreplace
 from marshal import load, dump
 #import sqlite3 as sqlite
 
 from whoosh.filedb.filetables import LengthWriter, LengthReader
-from whoosh.util import length_to_byte, now
+from whoosh.util import length_to_byte
 
 
-def imerge(iterators):
-    """Merge-sorts items from a list of iterators.
-    """
-    
-    # The list of "current" head items from the iterators
-    current = []
-    
-    # Initialize the current list with the first item from each iterator
-    for g in iterators:
-        try:
-            current.append((g.next(), g))
-        except StopIteration:
-            pass
+try:
+    from sys import getsizeof
+except ImportError:
+    # If this is Python 2.5, rig up a guesstimated version of getsizeof
+    def getsizeof(obj):
+        if obj is None:
+            return 8
+        t = type(obj)
+        if t is int:
+            return 12
+        elif t is float:
+            return 16
+        elif t is long:
+            return 16
+        elif t is str:
+            return 21 + len(obj)
+        elif t is unicode:
+            return 26 + 2 * len(obj)
+
+
+try:
+    from heapq import merge
+    def imerge(iterables):
+        return merge(*iterables)
+except ImportError:
+    def imerge(iterables):
+        """Merge-sorts items from a list of iterators.
+        """
         
-    # Turn the current list into a heap structure
-    heapify(current)
+        _heappop, _heapreplace, _StopIteration = heappop, heapreplace, StopIteration
     
-    # While there are multiple iterators in the current list, pop the lowest
-    # item and refill from the popped item's iterator
-    while len(current) > 1:
-        item, gen = heappop(current)
-        yield item
-        try:
-            heappush(current, (gen.next(), gen))
-        except StopIteration:
-            pass
+        h = []
+        h_append = h.append
+        for itnum, it in enumerate(map(iter, iterables)):
+            try:
+                next = it.next
+                h_append([next(), itnum, next])
+            except _StopIteration:
+                pass
+        heapify(h)
     
-    # If there's only one iterator left, shortcut to simply yield all items
-    # from the iterator. This is faster than popping and refilling the heap.
-    if current:
-        item, gen = current[0]
-        yield item
-        for item in gen:
-            yield item
+        while 1:
+            try:
+                while 1:
+                    v, itnum, next = s = h[0]   # raises IndexError when h is empty
+                    yield v
+                    s[0] = next()               # raises StopIteration when exhausted
+                    _heapreplace(h, s)          # restore heap condition
+            except _StopIteration:
+                _heappop(h)                     # remove empty iterator
+            except IndexError:
+                return
 
 
-def read_run(filename, count):
-    f = open(filename, "rb")
-    while count:
-        count -= 1
-        yield load(f)
-    f.close()
+def read_run(filename, count, atatime=100):
+    with open(filename, "rb") as f:
+        while count:
+            buff = []
+            take = min(atatime, count)
+            for _ in xrange(take):
+                buff.append(load(f))
+            count -= take
+            for item in buff:
+                yield item
 
 
-def write_postings(schema, termtable, lengths, postwriter, postiter,
-                   inlinelimit=1):
-    # This method pulls postings out of the posting pool (built up as
-    # documents are added) and writes them to the posting file. Each time
-    # it encounters a posting for a new term, it writes the previous term
-    # to the term index (by waiting to write the term entry, we can easily
-    # count the document frequency and sum the terms by looking at the
-    # postings).
-
-    current_fieldname = None # Field number of the current term
-    current_text = None # Text of the current term
-    first = True
-    current_weight = 0
-    offset = None
-    getlength = lengths.get
-    format = None
-
-    # Loop through the postings in the pool. Postings always come out of the
-    # pool in (field number, lexical) order.
-    for fieldname, text, docnum, weight, valuestring in postiter:
-        # Is this the first time through, or is this a new term?
-        if first or fieldname > current_fieldname or text > current_text:
-            if first:
-                first = False
-            else:
-                # This is a new term, so finish the postings and add the
-                # term to the term table
-                
-                postcount = postwriter.posttotal
-                # If the number of posts is below a certain threshold,
-                # inline them in the "offset" argument.
-                if postcount <= inlinelimit and postwriter.blockcount < 1:
-                    _, maxwol, minlength = postwriter.block_stats()
-                    offset = (tuple(postwriter.blockids),
-                              tuple(postwriter.blockweights),
-                              tuple(postwriter.blockvalues),
-                              maxwol, minlength)
-                    postwriter.cancel()
-                else:
-                    postwriter.finish()
-                
-                termtable.add((current_fieldname, current_text),
-                              (current_weight, offset, postcount))
-
-            # Reset the post writer and the term variables
-            if fieldname != current_fieldname:
-                format = schema[fieldname].format
-                current_fieldname = fieldname
-            current_text = text
-            current_weight = 0
-            offset = postwriter.start(format)
-
-        elif (fieldname < current_fieldname
-              or (fieldname == current_fieldname and text < current_text)):
-            # This should never happen!
-            raise Exception("Postings are out of order: %r:%s .. %r:%s" %
-                            (current_fieldname, current_text, fieldname, text))
-
-        # Write a posting for this occurrence of the current term
-        current_weight += weight
-        postwriter.write(docnum, weight, valuestring, getlength(docnum, fieldname))
-
-    # If there are still "uncommitted" postings at the end, finish them off
-    if not first:
-        postcount = postwriter.finish()
-        termtable.add((current_fieldname, current_text),
-                      (current_weight, offset, postcount))
+DEBUG_DIR = False
 
 
 class PoolBase(object):
     def __init__(self, schema, dir=None, basename=''):
         self.schema = schema
         self._using_tempdir = False
-        if dir is None:
-            dir = tempfile.mkdtemp(".whoosh")
-            self._using_tempdir = True
         self.dir = dir
+        self._using_tempdir = dir is None
         self.basename = basename
         
         self.length_arrays = {}
         self._fieldlength_totals = defaultdict(int)
         self._fieldlength_maxes = {}
     
+    def _make_dir(self):
+        if self.dir is None:
+            self.dir = tempfile.mkdtemp(".whoosh")
+            
+            if DEBUG_DIR:
+                dfile = open(self._filename("DEBUG.txt"), "wb")
+                import traceback
+                traceback.print_stack(file=dfile)
+                dfile.close()
+    
     def _filename(self, name):
         return os.path.abspath(os.path.join(self.dir, self.basename + name))
     
     def _clean_temp_dir(self):
-        if self._using_tempdir:
+        if self._using_tempdir and self.dir and os.path.exists(self.dir):
+            if DEBUG_DIR:
+                os.remove(self._filename("DEBUG.txt"))
+            
             try:
                 os.rmdir(self.dir)
-            except OSError, e:
+            except OSError:
                 # directory didn't exist or was not empty -- don't
                 # accidentially delete data
-                print "Error:", str(e)
                 pass
     
-    def unique_name(self, ext=""):
-        return self._filename(unique_name() + ext)
+    def cleanup(self):
+        self._clean_temp_dir()
     
     def cancel(self):
         pass
@@ -238,16 +206,19 @@ class TempfilePool(PoolBase):
         if self.size >= self.limit:
             self.dump_run()
 
-        self.size += len(fieldname) + len(text) + 18
-        if valuestring: self.size += len(valuestring)
-        
-        self.postings.append((fieldname, text, docnum, weight, valuestring))
+        tup = (fieldname, text, docnum, weight, valuestring)
+        # 48 bytes for tuple overhead (28 bytes + 4 bytes * 5 items) plus the
+        # sizes of the objects inside the tuple, plus 4 bytes overhead for
+        # putting the tuple in the postings list
+        #self.size += 48 + sum(getsizeof(o) for o in tup) + 4
+        valsize = len(valuestring) if valuestring else 0
+        self.size += 48 + len(fieldname) + 22 + len(text) + 26 + 16 + 16 + valsize + 22 + 4
+        self.postings.append(tup)
         self.count += 1
     
     def dump_run(self):
         if self.size > 0:
-            #print "Dumping run..."
-            t = now()
+            self._make_dir()
             fd, filename = tempfile.mkstemp(".run", dir=self.dir)
             runfile = os.fdopen(fd, "w+b")
             self.postings.sort()
@@ -259,7 +230,6 @@ class TempfilePool(PoolBase):
             self.postings = []
             self.size = 0
             self.count = 0
-            #print "Dumping run took", now() - t, "seconds"
     
     def run_filenames(self):
         return [filename for filename, _ in self.runs]
@@ -274,10 +244,10 @@ class TempfilePool(PoolBase):
                     os.remove(filename)
                 except IOError:
                     pass
-                
+        
         self._clean_temp_dir()
         
-    def finish(self, doccount, lengthfile, termtable, postingwriter):
+    def finish(self, termswriter, doccount, lengthfile):
         self._write_lengths(lengthfile, doccount)
         lengths = LengthReader(None, doccount, self.length_arrays)
         
@@ -292,13 +262,16 @@ class TempfilePool(PoolBase):
                 postiter = imerge([read_run(runname, count)
                                    for runname, count in self.runs])
         
-            write_postings(self.schema, termtable, lengths, postingwriter, postiter)
+            termswriter.add_iter(postiter, lengths.get)
         self.cleanup()
         
-"""
+
+# Alternative experimental and testing pools
+
 class SqlitePool(PoolBase):
     def __init__(self, schema, dir=None, basename='', limitmb=32, **kwargs):
         super(SqlitePool, self).__init__(schema, dir=dir, basename=basename)
+        self._make_dir()
         self.postbuf = defaultdict(list)
         self.bufsize = 0
         self.limit = limitmb * 1024 * 1024
@@ -309,6 +282,8 @@ class SqlitePool(PoolBase):
         return self._filename("%s.sqlite" % name)
     
     def _con(self, name):
+        import sqlite3 as sqlite
+        
         filename = self._field_filename(name)
         con = sqlite.connect(filename)
         if name not in self.fieldnames:
@@ -343,7 +318,7 @@ class SqlitePool(PoolBase):
             con.close()
             os.remove(self._field_filename(name))
         
-        if self._using_tempdir:
+        if self._using_tempdir and self.dir:
             try:
                 os.rmdir(self.dir)
             except OSError:
@@ -359,7 +334,7 @@ class SqlitePool(PoolBase):
                 yield (fieldname, text, docnum, weight, valuestring)
             del self.postbuf[fieldname]
             
-    def finish(self, doccount, lengthfile, termtable, postingwriter):
+    def finish(self, termswriter, doccount, lengthfile):
         self._write_lengths(lengthfile, doccount)
         lengths = LengthReader(None, doccount, self.length_arrays)
         
@@ -370,8 +345,8 @@ class SqlitePool(PoolBase):
                 self.flush()
             gen = self.readback()
         
-        write_postings(self.schema, termtable, lengths, postingwriter, gen)
-    """
+        termswriter.add_iter(gen, lengths.get)
+    
 
 class NullPool(PoolBase):
     def __init__(self, *args, **kwargs):
@@ -400,15 +375,36 @@ class MemPool(PoolBase):
     def add_posting(self, *item):
         self.postbuf.append(item)
         
-    def finish(self, doccount, lengthfile, termtable, postingwriter):
+    def finish(self, termswriter, doccount, lengthfile):
         self._write_lengths(lengthfile, doccount)
         lengths = LengthReader(None, doccount, self.length_arrays)
         self.postbuf.sort()
-        write_postings(self.schema, termtable, lengths, postingwriter, self.postbuf)
+        termswriter.add_iter(self.postbuf, lengths.get)
 
 
+#class UnixSortPool(PoolBase):
+#    def __init__(self, schema, dir=None, basename='', limitmb=32, **kwargs):
+#        super(UnixSortPool, self).__init__(schema, dir=dir, basename=basename)
+#        self._make_dir()
+#        fd, self.filename = tempfile.mkstemp(".run", dir=self.dir)
+#        self.sortfile = os.fdopen(fd, "wb")
+#        self.linebuffer = []
+#        self.bufferlimit = 100
+#        
+#    def add_posting(self, *args):
+#        self.sortfile.write(b64encode(dumps(args)) + "\n")
+#        
+#    def finish(self, termswriter, doccount, lengthfile):
+#        self.sortfile.close()
+#        from whoosh.util import now
+#        print "Sorting file...", self.filename
+#        t = now()
+#        outpath = os.path.join(os.path.dirname(self.filename), "sorted.txt")
+#        os.system("sort %s >%s" % (self.filename, outpath))
+#        print "...took", now() - t
 
-
+    
+    
 
 
 

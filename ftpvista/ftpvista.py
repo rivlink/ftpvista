@@ -101,6 +101,8 @@ def main_daemonized(config):
     # Create the DB to store informations about the FTP servers
     db_uri = config.get('db', 'uri')
     rivplayer_uri = config.get('db', 'rivplayer_uri')
+    if rivplayer_uri == 'None':
+        rivplayer_uri = None
     persist = ftpvista_persist.FTPVistaPersist(db_uri, rivplayer_uri)
     persist.initialize_store()
 

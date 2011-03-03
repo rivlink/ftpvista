@@ -14,22 +14,33 @@
 # limitations under the License.
 #===============================================================================
 
+from __future__ import with_statement
+import threading
+import weakref
 from array import array
 from collections import defaultdict
 from heapq import heappush, heapreplace
 from struct import Struct
 
-from whoosh.system import _INT_SIZE
+from whoosh.system import _INT_SIZE, _FLOAT_SIZE, _LONG_SIZE
 from whoosh.util import utf8encode
 
 
 pack_int_le = Struct("<i").pack
+
+
 def pickled_unicode(u):
     # Returns the unicode string as a pickle protocol 2 operator
     return "X%s%s" % (pack_int_le(len(u)), utf8encode(u)[0])
 
+
+class BadFieldCache(Exception):
+    pass
+
+
 # Python does not support arrays of long long see Issue 1172711
 # These functions help write/read a simulated an array of q/Q using lists
+
 def write_qsafe_array(typecode, arry, dbfile):
     if typecode == "q":
         for num in arry:
@@ -39,7 +50,8 @@ def write_qsafe_array(typecode, arry, dbfile):
             dbfile.write_ulong(num)
     else:
         dbfile.write_array(arry)
-        
+
+
 def read_qsafe_array(typecode, size, dbfile):
     if typecode == "q":
         arry = [dbfile.read_long() for _ in xrange(size)]
@@ -80,6 +92,29 @@ class FieldCache(object):
                 and self.hastexts == other.hastexts
                 and self.order == other.order
                 and self.texts == other.texts)
+    
+    def __ne__(self, other):
+        return not self.__eq__(other)
+    
+    def size(self):
+        """Returns the size in bytes (or as accurate an estimate as is
+        practical, anyway) of this cache.
+        """
+        
+        orderlen = len(self.order)
+        if self.typecode == "B":
+            total = orderlen
+        elif self.typecode in "Ii":
+            total = orderlen * _INT_SIZE
+        elif self.typecode == "f":
+            total = orderlen * _FLOAT_SIZE
+        elif self.typecode in "Qq":
+            total = orderlen * _LONG_SIZE
+        
+        if self.hastexts:
+            total += sum(len(t) for t in self.texts)
+            
+        return total
     
     # Class constructor for building a field cache from a reader
     
@@ -127,6 +162,17 @@ class FieldCache(object):
                 else:
                     order[id] = sortable
         
+        # Compact the order array if possible
+        if hastexts:
+            if len(texts) < 255:
+                newcode = "B"
+            elif len(texts) < 65535:
+                newcode = "H"
+            
+            if newcode != order.typecode:
+                order = array(newcode, order)
+                typecode = newcode
+        
         return cls(order, texts, hastexts=hastexts, typecode=typecode)
     
     # Class constructor for defining a field cache using arbitrary queries
@@ -155,6 +201,11 @@ class FieldCache(object):
         >>> fc = FieldCache.from_file(f)
         """
         
+        # Read the finished tag
+        tag = dbfile.read(1)
+        if tag != "+":
+            raise BadFieldCache
+        
         # Read the number of documents
         doccount = dbfile.read_uint()
         textcount = dbfile.read_uint()
@@ -175,10 +226,15 @@ class FieldCache(object):
         >>> fc.to_file(f)
         """
         
-        dbfile.write_uint(len(self.order)) # Number of documents
+        # Write a tag at the start of the file indicating the file write is in
+        # progress, to warn other processes that might open the file. We'll
+        # seek back and change this when the file is done.
+        dbfile.write("-")
+        
+        dbfile.write_uint(len(self.order))  # Number of documents
         
         if self.hastexts:
-            dbfile.write_uint(len(self.texts)) # Number of texts
+            dbfile.write_uint(len(self.texts))  # Number of texts
             dbfile.write_pickle(self.texts)
         
             # Compact the order array if possible
@@ -191,11 +247,15 @@ class FieldCache(object):
                 self.order = array(newcode, self.order)
                 self.typecode = newcode
         else:
-            dbfile.write_uint(0) # No texts
+            dbfile.write_uint(0)  # No texts
         
         dbfile.write(self.typecode)
         write_qsafe_array(self.typecode, self.order, dbfile)
         dbfile.flush()
+        
+        # Seek back and change the tag byte at the start of the file
+        dbfile.seek(0)
+        dbfile.write("+")
     
     # Field cache operations
     
@@ -256,7 +316,7 @@ class FieldCache(object):
         
         for score, docnum in scores_and_docnums:
             key = key_for(docnum)
-            ritem = (0-score, docnum)
+            ritem = (0 - score, docnum)
             ls = groups[key]
             if limit:
                 if len(ls) < limit:
@@ -301,9 +361,11 @@ class FieldCacheWriter(object):
         self.key = 0
         self.keycount = 1
         
+        self.tagpos = dbfile.tell()
+        dbfile.write("-")
         self.start = dbfile.tell()
-        dbfile.write_uint(0) # Number of docs
-        dbfile.write_uint(0) # Number of texts
+        dbfile.write_uint(0)  # Number of docs
+        dbfile.write_uint(0)  # Number of texts
         
         if self.hastexts:
             # Start the pickled list of texts
@@ -350,8 +412,207 @@ class FieldCacheWriter(object):
         dbfile.write_uint(len(order))
         if self.hastexts:
             dbfile.write_uint(keycount)
+        dbfile.flush()
+        
+        # Seek back and write the finished file tag
+        dbfile.seek(self.tagpos)
+        dbfile.write("+")
         
         dbfile.close()
     
+
+# Caching policies
+
+class FieldCachingPolicy(object):
+    """Base class for field caching policies.
+    """
+    
+    def put(self, key, obj, save=True):
+        """Adds the given object to the cache under the given key.
+        """
+        
+        raise NotImplementedError
+    
+    def __contains__(self, key):
+        """Returns True if an object exists in the cache (either in memory
+        or on disk) under the given key.
+        """
+        
+        raise NotImplementedError
+    
+    def is_loaded(self, key):
+        """Returns True if an object exists in memory for the given key. This
+        might be useful for scenarios where code can use a field cache if it's
+        already loaded, but is not important enough to load it for its own sake.
+        """
+        
+        raise NotImplementedError
+    
+    def get(self, key):
+        """Returns the object for the given key, or ``None`` if the key does
+        not exist in the cache.
+        """
+        
+        raise NotImplementedError
+    
+    def delete(self, key):
+        """Removes the object for the given key from the cache.
+        """
+        
+        pass
+    
+    def get_class(self):
+        """Returns the class to use when creating field caches. This class
+        should implement the same protocol as FieldCache.
+        """
+        
+        return FieldCache
+    
+
+class NoCaching(FieldCachingPolicy):
+    """A field caching policy that does not save field caches at all.
+    """
+    
+    def put(self, key, obj, save=True):
+        pass
+    
+    def __contains__(self, key):
+        return False
+    
+    def is_loaded(self, key):
+        return False
+    
+    def get(self, key):
+        return None
+    
+
+class DefaultFieldCachingPolicy(FieldCachingPolicy):
+    """A field caching policy that saves generated caches in memory and also
+    writes them to disk by default.
+    """
+    
+    shared_cache = weakref.WeakValueDictionary()
+    sharedlock = threading.Lock()
+    
+    def __init__(self, basename, storage=None, gzip_caches=False,
+                 fcclass=FieldCache):
+        """
+        :param basename: a prefix for filenames. This is usually the name of
+            the reader's segment.
+        :param storage: a custom :class:`whoosh.store.Storage` object to use
+            for saving field caches. If this is ``None``, this object will not
+            save caches to disk.
+        :param gzip_caches: if True, field caches saved to disk by this object
+            will be compressed. Loading compressed caches is very slow, so you
+            should not turn this option on.
+        :param fcclass: 
+        """
+        
+        self.basename = basename
+        self.storage = storage
+        self.caches = {}
+        self.gzip_caches = gzip_caches
+        self.fcclass = fcclass
+    
+    def __contains__(self, key):
+        return self.is_loaded(key) or self._file_exists(key)
+    
+    def _filename(self, key):
+        if "/" in key:
+            savename = key[key.rfind("/") + 1:]
+        else:
+            savename = key
+        return "%s.%s.fc" % (self.basename, savename)
+    
+    def _file_exists(self, key):
+        if not self.storage:
+            return False
+        
+        filename = self._filename(key)
+        gzfilename = filename + ".gz"
+        return (self.storage.file_exists(filename)
+                or self.storage.file_exists(gzfilename))
+    
+    def _save(self, key, cache):
+        filename = self._filename(key)
+        if self.gzip_caches:
+            filename += ".gz"
+        
+        try:
+            f = self.storage.create_file(filename, gzip=self.gzip_caches,
+                                         excl=True)
+        except OSError:
+            pass
+        else:
+            cache.to_file(f)
+            f.close()
+    
+    def _load(self, key):
+        storage = self.storage
+        filename = self._filename(key)
+        gzfilename = filename + ".gz"
+        gzipped = False
+        if storage.file_exists(gzfilename) and not storage.file_exists(filename):
+            filename = gzfilename
+            gzipped = True
+        
+        f = storage.open_file(filename, mapped=False, gzip=gzipped)
+        cache = self.fcclass.from_file(f)
+        f.close()
+        return cache
+    
+    def is_loaded(self, key):
+        if key in self.caches:
+            return True
+        
+        with self.sharedlock:
+            return key in self.shared_cache
+    
+    def put(self, key, cache, save=True):
+        self.caches[key] = cache
+        if save:
+            if self.storage:
+                self._save(key, cache)
+            with self.sharedlock:
+                if key not in self.shared_cache:
+                    self.shared_cache[key] = cache
+    
+    def get(self, key):
+        if key in self.caches:
+            return self.caches.get(key)
+        
+        with self.sharedlock:
+            if key in self.shared_cache:
+                return self.shared_cache[key]
+        
+        if self._file_exists(key):
+            try:
+                return self._load(key)
+            except (OSError, BadFieldCache):
+                return None
+
+    def delete(self, key):
+        try:
+            del self.caches[key]
+        except KeyError:
+            pass
+        
+    def get_class(self):
+        return self.fcclass
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

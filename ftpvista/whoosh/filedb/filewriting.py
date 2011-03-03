@@ -14,6 +14,7 @@
 # limitations under the License.
 #===============================================================================
 
+from __future__ import with_statement
 from bisect import bisect_right
 from collections import defaultdict
 
@@ -23,7 +24,6 @@ from whoosh.filedb.filepostings import FilePostingWriter
 from whoosh.filedb.filetables import (TermIndexWriter, StoredFieldWriter,
                                       TermVectorWriter)
 from whoosh.filedb.pools import TempfilePool
-from whoosh.reading import TermNotFound
 from whoosh.store import LockError
 from whoosh.support.filelock import try_for
 from whoosh.util import fib
@@ -86,15 +86,15 @@ class SegmentWriter(IndexWriter):
             self.writelock = ix.lock("WRITELOCK")
             if not try_for(self.writelock.acquire, timeout=timeout, delay=delay):
                 raise LockError
-        
-        self.ix = ix
-        self.storage = ix.storage
-        self.indexname = ix.indexname
-        self.is_closed = False
+        self.readlock = ix.lock("READLOCK")
         
         info = ix._read_toc()
         self.schema = info.schema
         self.segments = info.segments
+        self.storage = ix.storage
+        self.indexname = ix.indexname
+        self.is_closed = False
+        
         self.blocklimit = blocklimit
         self.segment_number = info.segment_counter + 1
         self.generation = info.generation + 1
@@ -116,11 +116,12 @@ class SegmentWriter(IndexWriter):
         
         # Terms index
         tf = self.storage.create_file(segment.termsindex_filename)
-        self.termsindex = TermIndexWriter(tf)
-        
+        ti = TermIndexWriter(tf)
         # Term postings file
         pf = self.storage.create_file(segment.termposts_filename)
-        self.postwriter = FilePostingWriter(pf, blocklimit=blocklimit)
+        pw = FilePostingWriter(pf, blocklimit=blocklimit)
+        # Terms writer
+        self.termswriter = TermsWriter(self.schema, ti, pw)
         
         if self.schema.has_vectored_fields():
             # Vector index
@@ -171,7 +172,8 @@ class SegmentWriter(IndexWriter):
         #number.
 
         offsets = self._doc_offsets
-        if len(offsets) == 1: return 0
+        if len(offsets) == 1:
+            return 0
         return bisect_right(offsets, docnum) - 1
 
     def _segment_and_docnum(self, docnum):
@@ -193,6 +195,8 @@ class SegmentWriter(IndexWriter):
 
     def delete_document(self, docnum, delete=True):
         self._check_state()
+        if docnum >= sum(seg.doccount for seg in self.segments):
+            raise IndexingError("No document ID %r in this index" % docnum)
         segment, segdocnum = self._segment_and_docnum(docnum)
         segment.delete_document(segdocnum, delete=delete)
 
@@ -207,10 +211,12 @@ class SegmentWriter(IndexWriter):
         segment, segdocnum = self._segment_and_docnum(docnum)
         return segment.is_deleted(segdocnum)
 
-    def searcher(self):
+    def reader(self, reuse=None):
         self._check_state()
         from whoosh.filedb.fileindex import FileIndex
-        return FileIndex(self.storage, indexname=self.indexname).searcher()
+        
+        return FileIndex._reader(self.storage, self.schema, self.segments,
+                                 self.generation, reuse=reuse)
     
     def add_reader(self, reader):
         self._check_state()
@@ -223,7 +229,7 @@ class SegmentWriter(IndexWriter):
         fieldnames = set(self.schema.names())
         
         # Add stored documents, vectors, and field lengths
-        for docnum in xrange(reader.doc_count_all()):
+        for docnum in reader.all_doc_ids():
             if (not has_deletions) or (not reader.is_deleted(docnum)):
                 d = dict(item for item
                          in reader.stored_fields(docnum).iteritems()
@@ -311,64 +317,7 @@ class SegmentWriter(IndexWriter):
         self.docnum += 1
         #print "%f" % (now() - t)
     
-    def update_document(self, **fields):
-        self._check_state()
-        _unique_cache = self._unique_cache
-        
-        # Check which of the supplied fields are unique
-        unique_fields = [name for name, field in self.schema.items()
-                         if name in fields and field.unique]
-        if not unique_fields:
-            raise IndexingError("None of the fields in %r"
-                                " are unique" % fields.keys())
-        
-        # Delete documents matching the unique terms
-        delset = set()
-        for name in unique_fields:
-            field = self.schema[name]
-            text = field.to_text(fields[name])
-            
-            # If we've seen an update_document with this unique field before...
-            if name in _unique_cache:
-                # Get the cache for this field
-                term2docnum = _unique_cache[name]
-                
-                # If the cache is None, that means we've seen this field once
-                # before but didn't cache it the first time. Cache it now.
-                if term2docnum is None:
-                    # Read the first document number found for every term in
-                    # this field and cache the mapping from term to doc num
-                    term2docnum = {}
-                    s = self.searcher()
-                    term2docnum = dict(s.reader().first_ids(name))
-                    s.close()
-                    _unique_cache[name] = term2docnum
-                
-                # Look up the cached document number for this term
-                if text in term2docnum:
-                    delset.add(term2docnum[text])
-            else:
-                # This is the first time we've seen an update_document with
-                # this field. Mark it by putting None in the cache for this
-                # field, but don't cache it. We'll only build the cache if we
-                # see an update_document on this field again. This is to
-                # prevent caching a field even when the user is only going to
-                # call update_document once.
-                reader = self.searcher().reader()
-                try:
-                    delset.add(reader.postings(name, text).id())
-                    _unique_cache[name] = None
-                except TermNotFound:
-                    pass
-                finally:
-                    reader.close()
-            
-        # Delete the old docs
-        for docnum in delset:
-            self.delete_document(docnum)
-        
-        # Add the given fields
-        self.add_document(**fields)
+    #def update_document(self, **fields):
     
     def _add_vector(self, docnum, fieldname, vlist):
         vpostwriter = self.vpostwriter
@@ -394,8 +343,7 @@ class SegmentWriter(IndexWriter):
     def _close_all(self):
         self.is_closed = True
         
-        self.termsindex.close()
-        self.postwriter.close()
+        self.termswriter.close()
         self.storedfields.close()
         if not self.lengthfile.is_closed:
             self.lengthfile.close()
@@ -455,13 +403,14 @@ class SegmentWriter(IndexWriter):
             # Tell the pool we're finished adding information, it should add its
             # accumulated data to the lengths, terms index, and posting files.
             if self._added:
-                self.pool.finish(self.docnum, self.lengthfile, self.termsindex,
-                                 self.postwriter)
+                self.pool.finish(self.termswriter, self.docnum, self.lengthfile)
             
                 # Create a Segment object for the segment created by this writer and
                 # add it to the list of remaining segments returned by the merge policy
                 # function
                 new_segments.append(self._getsegment())
+            else:
+                self.pool.cleanup()
             
             # Close all files, write a new TOC with the new segment list, and
             # release the lock.
@@ -471,12 +420,11 @@ class SegmentWriter(IndexWriter):
             _write_toc(self.storage, self.schema, self.indexname, self.generation,
                        self.segment_number, new_segments)
             
-            readlock = self.ix.lock("READLOCK")
-            readlock.acquire(True)
+            self.readlock.acquire(True)
             try:
                 _clean_files(self.storage, self.indexname, self.generation, new_segments)
             finally:
-                readlock.release()
+                self.readlock.release()
         
         finally:
             if self.writelock:
@@ -490,6 +438,105 @@ class SegmentWriter(IndexWriter):
         finally:
             if self.writelock:
                 self.writelock.release()
+
+
+class TermsWriter(object):
+    def __init__(self, schema, termsindex, postwriter, inlinelimit=1):
+        self.schema = schema
+        self.termsindex = termsindex
+        self.postwriter = postwriter
+        self.inlinelimit = inlinelimit
+        
+        self.lastfn = None
+        self.lasttext = None
+        self.format = None
+        self.offset = None
+    
+    def _new_term(self, fieldname, text):
+        lastfn = self.lastfn
+        lasttext = self.lasttext
+        if fieldname < lastfn or (fieldname == lastfn and text < lasttext):
+            raise Exception("Postings are out of order: %r:%s .. %r:%s" %
+                            (lastfn, lasttext, fieldname, text))
+    
+        if fieldname != lastfn:
+            self.format = self.schema[fieldname].format
+    
+        if fieldname != lastfn or text != lasttext:
+            self._finish_term()
+            # Reset the term attributes
+            self.weight = 0
+            self.offset = self.postwriter.start(self.format)
+            self.lasttext = text
+            self.lastfn = fieldname
+    
+    def _finish_term(self):
+        postwriter = self.postwriter
+        if self.lasttext is not None:
+            postcount = postwriter.posttotal
+            if postcount <= self.inlinelimit and postwriter.blockcount < 1:
+                offset = postwriter.as_inline()
+                postwriter.cancel()
+            else:
+                offset = self.offset
+                postwriter.finish()
+            
+            self.termsindex.add((self.lastfn, self.lasttext),
+                                (self.weight, offset, postcount))
+    
+    def add_postings(self, fieldname, text, matcher, getlen, offset=0, docmap=None):
+        self._new_term(fieldname, text)
+        postwrite = self.postwriter.write
+        totalweight = 0
+        while matcher.is_active():
+            docnum = matcher.id()
+            weight = matcher.weight()
+            valuestring = matcher.value()
+            if docmap:
+                newdoc = docmap[docnum]
+            else:
+                newdoc = offset + docnum
+            totalweight += weight
+            postwrite(newdoc, weight, valuestring, getlen(docnum, fieldname))
+            matcher.next()
+        self.weight += totalweight
+    
+    def add_iter(self, postiter, getlen, offset=0, docmap=None):
+        _new_term = self._new_term
+        postwrite = self.postwriter.write
+        for fieldname, text, docnum, weight, valuestring in postiter:
+            _new_term(fieldname, text)
+            if docmap:
+                newdoc = docmap[docnum]
+            else:
+                newdoc = offset + docnum
+            self.weight += weight
+            postwrite(newdoc, weight, valuestring, getlen(docnum, fieldname))
+    
+    def add(self, fieldname, text, docnum, weight, valuestring, fieldlen):
+        self._new_term(fieldname, text)
+        self.weight += weight
+        self.postwriter.write(docnum, weight, valuestring, fieldlen)
+        
+    def close(self):
+        self._finish_term()
+        self.termsindex.close()
+        self.postwriter.close()
+        
+        
+        
+        
+            
+        
+
+
+
+
+
+
+
+
+
 
 
 

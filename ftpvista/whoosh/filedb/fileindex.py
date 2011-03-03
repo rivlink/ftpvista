@@ -14,12 +14,14 @@
 # limitations under the License.
 #===============================================================================
 
-import cPickle, os, re
+import cPickle
+import re
+import uuid
 from time import time
 from threading import Lock
 
 from whoosh import __version__
-from whoosh.fields import Schema
+from whoosh.fields import ensure_schema
 from whoosh.index import Index, EmptyIndexError, IndexVersionError, _DEF_INDEX_NAME
 from whoosh.reading import EmptyReader, MultiReader
 from whoosh.store import Storage, LockError
@@ -34,12 +36,14 @@ _INDEX_VERSION = -110
 def _toc_filename(indexname, gen):
     return "_%s_%s.toc" % (indexname, gen)
 
+
 def _toc_pattern(indexname):
     """Returns a regular expression object that matches TOC filenames.
     name is the name of the index.
     """
 
     return re.compile("^_%s_([0-9]+).toc$" % indexname)
+
 
 def _segment_pattern(indexname):
     """Returns a regular expression object that matches segment filenames.
@@ -57,7 +61,8 @@ def _latest_generation(storage, indexname):
         m = pattern.match(filename)
         if m:
             num = int(m.group(1))
-            if num > max: max = num
+            if num > max:
+                max = num
     return max
 
 
@@ -68,11 +73,13 @@ def _create_index(storage, schema, indexname=_DEF_INDEX_NAME):
         if filename.startswith(prefix):
             storage.delete_file(filename)
     
+    schema = ensure_schema(schema)
     # Write a TOC file with an empty list of segments
     _write_toc(storage, schema, indexname, 0, 0, [])
 
 
 def _write_toc(storage, schema, indexname, gen, segment_counter, segments):
+    schema = ensure_schema(schema)
     schema.clean()
 
     # Use a temporary file for atomic write.
@@ -138,6 +145,7 @@ def _read_toc(storage, schema, indexname):
         stream.skip_string()
     else:
         schema = cPickle.loads(stream.read_string())
+    schema = ensure_schema(schema)
     
     # Generation
     index_gen = stream.read_int()
@@ -204,10 +212,11 @@ class FileIndex(Index):
     def __init__(self, storage, schema=None, indexname=_DEF_INDEX_NAME):
         if not isinstance(storage, Storage):
             raise ValueError("%r is not a Storage object" % storage)
-        if schema is not None and not isinstance(schema, Schema):
-            raise ValueError("%r is not a Schema object" % schema)
         if not isinstance(indexname, (str, unicode)):
             raise ValueError("indexname %r is not a string" % indexname)
+        
+        if schema:
+            schema = ensure_schema(schema)
         
         self.storage = storage
         self._schema = schema
@@ -238,8 +247,7 @@ class FileIndex(Index):
         return self.storage.file_modified(filename)
 
     def is_empty(self):
-        info = _read_toc(self.storage, self.schema, self.indexname)
-        return len(info.segments) == 0
+        return len(self._read_toc().segments) == 0
     
     def optimize(self):
         w = self.writer()
@@ -271,29 +279,21 @@ class FileIndex(Index):
     def schema(self):
         return self._current_schema()
 
-    def reader(self, reuse=None):
+    @classmethod
+    def _reader(self, storage, schema, segments, generation, reuse=None):
         from whoosh.filedb.filereading import SegmentReader
         
         reusable = {}
-        
-        # Lock the index so nobody can delete a segment while we're in the
-        # middle of creating the reader
-        lock = self.lock("READLOCK")
-        lock.acquire(True)
-        
         try:
-            # Read the information from the TOC file
-            info = self._read_toc()
-            
-            if len(info.segments) == 0:
+            if len(segments) == 0:
                 # This index has no segments! Return an EmptyReader object,
                 # which simply returns empty or zero to every method
-                return EmptyReader(info.schema)
+                return EmptyReader(schema)
             
             if reuse:
                 # Put all atomic readers in a dictionary keyed by their
                 # generation, so we can re-use them if them if possible
-                if reuse.is_atomic:
+                if reuse.is_atomic():
                     readers = [reuse]
                 else:
                     readers = [r for r, offset in reuse.leaf_readers()]
@@ -309,24 +309,35 @@ class FileIndex(Index):
                     del reusable[gen]
                     return r
                 else:
-                    return SegmentReader(self.storage, info.schema, segment)
+                    return SegmentReader(storage, schema, segment)
             
-            if len(info.segments) == 1:
+            if len(segments) == 1:
                 # This index has one segment, so return a SegmentReader object
                 # for the segment
-                return segreader(info.segments[0])
+                return segreader(segments[0])
             else:
                 # This index has multiple segments, so create a list of
                 # SegmentReaders for the segments, then composite them with a
                 # MultiReader
                 
-                readers = [segreader(segment) for segment in info.segments]
-                return MultiReader(readers, generation=info.generation)
-        
+                readers = [segreader(segment) for segment in segments]
+                return MultiReader(readers, generation=generation)
         finally:
-            lock.release()
             for r in reusable.values():
                 r.close()
+
+    def reader(self, reuse=None):
+        # Lock the index so nobody can delete a segment while we're in the
+        # middle of creating the reader
+        lock = self.lock("READLOCK")
+        lock.acquire(True)
+        try:
+            # Read the information from the TOC file
+            info = self._read_toc()
+            return self._reader(self.storage, info.schema, info.segments,
+                                info.generation, reuse=reuse)
+        finally:
+            lock.release()    
 
 
 class Segment(object):
@@ -374,14 +385,22 @@ class Segment(object):
         self.fieldlength_totals = fieldlength_totals
         self.fieldlength_maxes = fieldlength_maxes
         self.deleted = deleted
+        self.uuid = uuid.uuid4()
         
-        self._filenames = set()
-        for attr, ext in self.EXTENSIONS.iteritems():
-            fname = self.make_filename(ext)
-            setattr(self, attr + "_filename", fname)
-
     def __repr__(self):
-        return "%s(%r)" % (self.__class__.__name__, self.name)
+        return "<%s %r %s>" % (self.__class__.__name__, self.name,
+                               getattr(self, "uuid", ""))
+
+    def __getattr__(self, name):
+        # Capture accesses to e.g. Segment.fieldlengths_filename and return
+        # the appropriate filename
+        ext = "_filename"
+        if name.endswith(ext):
+            basename = name[:0 - len(ext)]
+            if basename in self.EXTENSIONS:
+                return self.make_filename(self.EXTENSIONS[basename])
+        
+        raise AttributeError(name)
 
     def copy(self):
         return Segment(self.name, self.generation, self.doccount,
@@ -418,7 +437,8 @@ class Segment(object):
         """
         :returns: the total number of deleted documents in this segment.
         """
-        if self.deleted is None: return 0
+        if self.deleted is None:
+            return 0
         return len(self.deleted)
 
     def field_length(self, fieldname, default=0):
@@ -444,21 +464,15 @@ class Segment(object):
         if delete:
             if self.deleted is None:
                 self.deleted = set()
-            elif docnum in self.deleted:
-                raise KeyError("Document %s in segment %r is already deleted"
-                               % (docnum, self.name))
-
             self.deleted.add(docnum)
-        else:
-            if self.deleted is None or docnum not in self.deleted:
-                raise KeyError("Document %s is not deleted" % docnum)
-
+        elif self.deleted is not None and docnum in self.deleted:
             self.deleted.clear(docnum)
 
     def is_deleted(self, docnum):
         """:returns: True if the given document number is deleted."""
 
-        if self.deleted is None: return False
+        if self.deleted is None:
+            return False
         return docnum in self.deleted
 
 

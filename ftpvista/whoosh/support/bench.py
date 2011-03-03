@@ -15,10 +15,9 @@
 #===============================================================================
 
 from __future__ import division
-import os.path, random, sys
+import os.path
 from optparse import OptionParser
 from shutil import rmtree
-from zlib import compress, decompress
 
 from whoosh import index, qparser, query
 from whoosh.util import now, find_object
@@ -38,6 +37,7 @@ except ImportError:
 
 try:
     from persistent import Persistent
+    
     class ZDoc(Persistent):
         def __init__(self, d):
             self.__dict__.update(d)
@@ -63,6 +63,16 @@ class Module(object):
     def finish(self, **kwargs):
         pass
     
+    def _process_result(self, d):
+        attrname = "process_result_%s" % self.options.lib
+        if hasattr(self.bench.spec, attrname):
+            method = getattr(self.bench.spec, attrname)
+            self._process_result = method
+            return method(d)
+        else:
+            self._process_result = lambda x: x
+            return d
+    
     def searcher(self):
         pass
     
@@ -76,13 +86,13 @@ class Module(object):
         raise NotImplementedError
     
     def results(self, r):
-        return r
+        for hit in r:
+            yield self._process_result(hit)
 
 
 class Spec(object):
     headline_field = "title"
     main_field = "body"
-    whoosh_compress_main = False
     
     def __init__(self, options, args):
         self.options = options
@@ -96,19 +106,24 @@ class Spec(object):
     
     def print_results(self, ls):
         showbody = self.options.showbody
+        snippets = self.options.snippets
         limit = self.options.limit
         for i, hit in enumerate(ls):
             if i >= limit:
                 break
             
-            print "%d. %s" % (i+1, hit.get(self.headline_field))
+            print "%d. %s" % (i + 1, hit.get(self.headline_field))
+            if snippets:
+                print self.show_snippet(hit)
             if showbody:
                 print hit.get(self.main_field)
-            
+
+
 class WhooshModule(Module):
     def indexer(self, create=True):
         schema = self.bench.spec.whoosh_schema()
         path = os.path.join(self.options.dir, "%s_whoosh" % self.options.indexname)
+        
         if not os.path.exists(path):
             os.mkdir(path)
         if create:
@@ -129,13 +144,15 @@ class WhooshModule(Module):
             self.writer = MultiSegmentWriter(ix, **kwargs)
         else:
             self.writer = ix.writer(**kwargs)
+        
+        self._procdoc = None
+        if hasattr(self.bench.spec, "process_document_whoosh"):
+            self._procdoc = self.bench.spec.process_document_whoosh
 
     def index_document(self, d):
-        if hasattr(self.bench, "process_document_whoosh"):
-            self.bench.process_document_whoosh(d)
-        if self.bench.spec.whoosh_compress_main:
-            mf = self.bench.spec.main_field
-            d["_stored_%s" % mf] = compress(d[mf], 9)
+        _procdoc = self._procdoc
+        if _procdoc:
+            _procdoc(d)
         self.writer.add_document(**d)
 
     def finish(self, merge=True, optimize=False):
@@ -154,22 +171,14 @@ class WhooshModule(Module):
     def find(self, q):
         return self.srch.search(q, limit=int(self.options.limit))
     
-    def results(self, r):
-        mf = self.bench.spec.main_field
-        for hit in r:
-            fs = hit.fields()
-            if self.bench.spec.whoosh_compress_main:
-                fs[mf] = decompress(fs[mf])
-            yield fs
-    
     def findterms(self, terms):
         limit = int(self.options.limit)
         s = self.srch
-        q = query.Term(self.main_field, None)
+        q = query.Term(self.bench.spec.main_field, None)
         for term in terms:
             q.text = term
             yield s.search(q, limit=limit)
-    
+            
 
 class XappyModule(Module):
     def indexer(self, **kwargs):
@@ -204,14 +213,14 @@ class XappyModule(Module):
     def findterms(self, conn, terms):
         limit = int(self.options.limit)
         for term in terms:
-            q = conn.query_field(self.main_field, term)
+            q = conn.query_field(self.bench.spec.main_field, term)
             yield conn.search(q, 0, limit)
     
     def results(self, r):
         hf = self.bench.spec.headline_field
         mf = self.bench.spec.main_field
         for hit in r:
-            yield {hf: hit.data[hf], mf: hit.data[mf]}
+            yield self._process_result({hf: hit.data[hf], mf: hit.data[mf]})
         
 
 class XapianModule(Module):
@@ -225,9 +234,9 @@ class XapianModule(Module):
             self.bench.process_document_xapian(d)
         doc = xapian.Document()
         doc.add_value(0, d.get(self.bench.spec.headline_field, "-"))
-        doc.set_data(d[self.main_field])
+        doc.set_data(d[self.bench.spec.main_field])
         self.ixer.set_document(doc)
-        self.ixer.index_text(d[self.main_field])
+        self.ixer.index_text(d[self.bench.spec.main_field])
         self.database.add_document(doc)
         
     def finish(self, **kwargs):
@@ -258,7 +267,8 @@ class XapianModule(Module):
         hf = self.bench.spec.headline_field
         mf = self.bench.spec.main_field
         for m in matches:
-            yield {hf: m.document.get_value(0), mf: m.document.get_data()}
+            yield self._process_result({hf: m.document.get_value(0),
+                                        mf: m.document.get_data()})
 
 
 class SolrModule(Module):
@@ -364,13 +374,66 @@ class ZcatalogModule(Module):
         mf = self.bench.spec.main_field
         for hit in r:
             # Have to access the attributes for them to be retrieved
-            yield {hf: getattr(hit, hf), mf: getattr(hit, mf)}
+            yield self._process_result({hf: getattr(hit, hf),
+                                        mf: getattr(hit, mf)})
 
 
+class NucularModule(Module):
+    def indexer(self, create=True):
+        import shutil
+        from nucular import Nucular
+        
+        dir = os.path.join(self.options.dir, "%s_nucular" % self.options.indexname)
+        if create:
+            if os.path.exists(dir):
+                shutil.rmtree(dir)
+            os.mkdir(dir)
+        self.archive = Nucular.Nucular(dir)
+        if create:
+            self.archive.create()
+        self.count = 0
+    
+    def index_document(self, d):
+        try:
+            self.archive.indexDictionary(str(self.count), d)
+        except ValueError:
+            print "d=", d
+            raise
+        self.count += 1
+        if not self.count % int(self.options.batch):
+            t = now()
+            self.archive.store(lazy=True)
+            self.indexer(create=False)
+    
+    def finish(self, **kwargs):
+        self.archive.store(lazy=False)
+        self.archive.aggregateRecent(fast=False, verbose=True)
+        self.archive.moveTransientToBase(verbose=True)
+        self.archive.cleanUp()
+    
+    def searcher(self):
+        from nucular import Nucular
+        
+        dir = os.path.join(self.options.dir, "%s_nucular" % self.options.indexname)
+        self.archive = Nucular.Nucular(dir)
+    
+    def query(self):
+        return " ".join(self.args)
+    
+    def find(self, q):
+        return self.archive.dictionaries(q)
+        
+    def findterms(self, terms):
+        for term in terms:
+            q = self.archive.Query()
+            q.anyWord(term)
+            yield q.resultDictionaries()
+            
+    
 class Bench(object):
     libs = {"whoosh": WhooshModule, "xappy": XappyModule,
             "xapian": XapianModule, "solr": SolrModule,
-            "zcatalog": ZcatalogModule}
+            "zcatalog": ZcatalogModule, "nucular": NucularModule}
     
     def index(self, lib):
         print "Indexing with %s..." % lib
@@ -397,7 +460,7 @@ class Bench(object):
                 if chunk and not count % chunk:
                     t = now()
                     sofar = t - starttime
-                    print "Done %d docs, %0.3f secs for %d, %0.3f total, %0.3f docs/s" % (count, t - chunkstarttime, chunk, sofar, count/sofar)
+                    print "Done %d docs, %0.3f secs for %d, %0.3f total, %0.3f docs/s" % (count, t - chunkstarttime, chunk, sofar, count / sofar)
                     chunkstarttime = t
                 if count > upto:
                     break
@@ -412,7 +475,8 @@ class Bench(object):
         committime = now()
         print "Commit time:", committime - spooltime
         totaltime = committime - starttime
-        print "Total time to index %d documents: %0.3f secs, %0.3f docs/s" % (count, totaltime, count/totaltime)
+        print "Total time to index %d documents: %0.3f secs (%0.3f minutes)" % (count, totaltime, totaltime / 60.0)
+        print "Indexed %0.3f docs/s" % (count / totaltime)
     
     def search(self, lib):
         lib.searcher()
@@ -438,7 +502,7 @@ class Bench(object):
         for r in lib.findterms(terms):
             pass
         searchtime = now() - starttime
-        print "Search time:", searchtime, "searches/s:", float(len(terms))/searchtime
+        print "Search time:", searchtime, "searches/s:", float(len(terms)) / searchtime
     
     def _parser(self, name):
         p = OptionParser()
@@ -462,7 +526,7 @@ class Bench(object):
                      default=1000)
         p.add_option("-B", "--batch", dest="batch",
                      help="Batch size for batch adding documents.",
-                     default=100)
+                     default=1000)
         p.add_option("-k", "--skip", dest="skip", metavar="N",
                      help="Index every Nth document.", default=1)
         p.add_option("-e", "--commit-every", dest="every", metavar="NUM",
@@ -492,6 +556,10 @@ class Bench(object):
                      help="Whoosh pool class", default=None)
         p.add_option("-X", "--expw", dest="expw", action="store_true",
                      help="Use experimental whoosh writer", default=False)
+        p.add_option("-Z", "--storebody", dest="storebody", action="store_true",
+                     help="Store the body text in index", default=False)
+        p.add_option("-q", "--snippets", dest="snippets", action="store_true",
+                     help="Show highlighted snippets", default=False)
         
         return p
     

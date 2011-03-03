@@ -17,7 +17,9 @@
 """ Contains functions and classes related to fields.
 """
 
-import datetime, fnmatch, re, struct
+import datetime
+import fnmatch
+import re
 from decimal import Decimal
 
 from whoosh.analysis import (IDAnalyzer, RegexAnalyzer, KeywordAnalyzer,
@@ -34,6 +36,8 @@ from whoosh.support.times import datetime_to_long
 
 class FieldConfigurationError(Exception):
     pass
+
+
 class UnknownFieldError(Exception):
     pass
 
@@ -330,7 +334,8 @@ class NUMERIC(FieldType):
             return [(self.to_text(num), 1, 1.0, '')]
     
     def prepare_number(self, x):
-        if x is None: return x
+        if x is None:
+            return x
         if self.decimal_places:
             x = Decimal(x)
             x *= 10 ** self.decimal_places
@@ -490,7 +495,6 @@ class DATETIME(NUMERIC):
         
         return query.NumericRange(fieldname, start, end, boost=boost)
         
-    
 
 class BOOLEAN(FieldType):
     """Special field type that lets you index boolean values (True and False).
@@ -707,6 +711,32 @@ class NGRAMWORDS(NGRAM):
 
 # Schema class
 
+class MetaSchema(type):
+    def __new__(cls, name, bases, attrs):
+        super_new = super(MetaSchema, cls).__new__
+        if not any(b for b in bases if isinstance(b, MetaSchema)):
+            # If this isn't a subclass of MetaSchema, don't do anything special
+            return super_new(cls, name, bases, attrs)
+        
+        # Create the class
+        special_attrs = {}
+        for key in attrs.keys():
+            if key.startswith("__"):
+                special_attrs[key] = attrs.pop(key)
+        new_class = super_new(cls, name, bases, special_attrs)
+        
+        fields = {}
+        for b in bases:
+            if hasattr(b, "_clsfields"):
+                fields.update(b._clsfields)
+        fields.update(attrs)
+        new_class._clsfields = fields
+        return new_class
+    
+    def schema(self):
+        return Schema(**self._clsfields)
+
+
 class Schema(object):
     """Represents the collection of fields in an index. Maps field names to
     FieldType objects which define the behavior of each field.
@@ -747,7 +777,7 @@ class Schema(object):
                 and self.items() == other.items())
     
     def __repr__(self):
-        return "<%s: %r>" % (self.__class__, self.names())
+        return "<%s: %r>" % (self.__class__.__name__, self.names())
     
     def __iter__(self):
         """Returns the field objects in this schema.
@@ -766,7 +796,7 @@ class Schema(object):
             if expr.match(name):
                 return fieldtype
         
-        raise KeyError("No field named %r" % name)
+        raise KeyError("No field named %r" % (name, ))
         
     def __len__(self):
         """Returns the number of fields in this schema.
@@ -884,8 +914,57 @@ class Schema(object):
         field = self[fieldname]
         if field.format and field.format.analyzer:
             return field.format.analyzer
-        
 
+
+class SchemaClass(Schema):
+    __metaclass__ = MetaSchema
+    
+    """Allows you to define a schema using declarative syntax, similar to
+    Django models::
+    
+        class MySchema(SchemaClass):
+            path = ID
+            date = DATETIME
+            content = TEXT
+            
+    You can use inheritance to share common fields between schemas::
+    
+        class Parent(SchemaClass):
+            path = ID(stored=True)
+            date = DATETIME
+            
+        class Child1(Parent):
+            content = TEXT(positions=False)
+            
+        class Child2(Parent):
+            tags = KEYWORD
+    
+    This class overrides ``__new__`` so instantiating your sub-class always
+    results in an instance of ``Schema``.
+    
+    >>> class MySchema(SchemaClass):
+    ...     title = TEXT(stored=True)
+    ...     content = TEXT
+    ... 
+    >>> s = MySchema()
+    >>> type(s)
+    <class 'whoosh.fields.Schema'>
+    """
+    
+    def __new__(cls, *args, **kwargs):
+        obj = super(Schema, cls).__new__(Schema)
+        kw = getattr(cls, "_clsfields", {})
+        kw.update(kwargs)
+        obj.__init__(*args, **kw)
+        return obj
+    
+
+def ensure_schema(schema):
+    if isinstance(schema, type) and issubclass(schema, Schema):
+        schema = schema.schema()
+    if not isinstance(schema, Schema):
+        raise FieldConfigurationError("%r is not a Schema" % schema)
+    return schema
     
     
     

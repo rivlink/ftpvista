@@ -86,7 +86,10 @@ class BitVector(object):
         return self.count()
     
     def __contains__(self, index):
-        return self[index]
+        byte = self.bits[index >> 3]
+        if not byte:
+            return False
+        return byte & (1 << (index & 7)) != 0
     
     def __iter__(self):
         get = self.__getitem__
@@ -170,7 +173,7 @@ class BitVector(object):
         self.bits[index >> 3] &= ~(1 << (index & 7))
         self.bcount = None
     
-    def set_from(self, iterable):
+    def update(self, iterable):
         """Takes an iterable of integers representing positions, and turns
         on the bits at those positions.
         """
@@ -199,7 +202,7 @@ class BitSet(object):
         self.size = size
         
         self._back = ()
-        self._switch(size > 256)
+        self._switch(size < 256)
         
         if source:
             for num in source:
@@ -215,7 +218,10 @@ class BitSet(object):
             self.add = self._back.set
             self.remove = self._vec_remove
             
-        self.__contains__ = self._back.__contains__
+        self.update = self._back.update
+    
+    def __contains__(self, n):
+        return n in self._back
 
     def __repr__(self):
         return "<%s %s/%s>" % (self.__class__.__name__, len(self._back), self.size)

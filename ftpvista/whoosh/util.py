@@ -17,14 +17,17 @@
 """Miscellaneous utility functions and classes.
 """
 
+from __future__ import with_statement
+import codecs
+import re
+import sys
+import time
 from array import array
-from math import log
-import codecs, re, sys, time
-
-from collections import deque, defaultdict
 from copy import copy
 from functools import wraps
+from math import log
 from struct import pack, unpack
+from threading import Lock
 
 from whoosh.system import IS_LITTLE
 
@@ -40,13 +43,13 @@ except ImportError:
         if r > n:
             return
         indices = range(n)
-        cycles = range(n, n-r, -1)
+        cycles = range(n, n - r, -1)
         yield tuple(pool[i] for i in indices[:r])
         while n:
             for i in reversed(range(r)):
                 cycles[i] -= 1
                 if cycles[i] == 0:
-                    indices[i:] = indices[i+1:] + indices[i:i+1]
+                    indices[i:] = indices[i + 1:] + indices[i:i + 1]
                     cycles[i] = n - i
                 else:
                     j = cycles[i]
@@ -55,6 +58,15 @@ except ImportError:
                     break
             else:
                 return
+
+
+try:
+    from operator import methodcaller
+except ImportError:
+    def methodcaller(name, *args, **kwargs):
+        def caller(obj):
+            return getattr(obj, name)(*args, **kwargs)
+        return caller
 
 
 if sys.platform == 'win32':
@@ -77,6 +89,7 @@ def array_to_string(a):
         a = copy(a)
         a.byteswap()
     return a.tostring()
+
 
 def string_to_array(typecode, s):
     a = array(typecode)
@@ -122,11 +135,13 @@ def _varint(i):
     s += chr(i)
     return s
 
+
 _varint_cache_size = 512
 _varint_cache = []
 for i in xrange(0, _varint_cache_size):
     _varint_cache.append(_varint(i))
 _varint_cache = tuple(_varint_cache)
+
 
 def varint(i):
     """Encodes the given integer into a string of the minimum number  of bytes.
@@ -134,6 +149,7 @@ def varint(i):
     if i < len(_varint_cache):
         return _varint_cache[i]
     return _varint(i)
+
 
 def varint_to_int(vi):
     b = ord(vi[0])
@@ -155,6 +171,7 @@ def signed_varint(i):
     if i >= 0:
         return varint(i << 1)
     return varint((i << 1) ^ (~0))
+
 
 def decode_signed_varint(i):
     """Zig-zag decodes an integer value.
@@ -184,17 +201,25 @@ def read_varint(readfn):
     return i
 
 
+# Fibonacci function
+
 _fib_cache = {}
+
+
 def fib(n):
     """Returns the nth value in the Fibonacci sequence.
     """
 
-    if n <= 2: return n
-    if n in _fib_cache: return _fib_cache[n]
+    if n <= 2:
+        return n
+    if n in _fib_cache:
+        return _fib_cache[n]
     result = fib(n - 1) + fib(n - 2)
     _fib_cache[n] = result
     return result
 
+
+# Float-to-byte encoding/decoding
 
 def float_to_byte(value, mantissabits=5, zeroexp=2):
     """Encodes a floating point number in a single byte.
@@ -217,6 +242,7 @@ def float_to_byte(value, mantissabits=5, zeroexp=2):
         return chr(255)
     else:
         return chr(smallfloat - fzero)
+
 
 def byte_to_float(b, mantissabits=5, zeroexp=2):
     """Decodes a floating point number stored in a single byte.
@@ -244,18 +270,21 @@ def length_to_byte(length):
     
     # This encoding formula works up to 108116 -> 255, so if the length is
     # equal to or greater than that limit, just return 255.
-    if length >= 108116: return 255
+    if length >= 108116:
+        return 255
     
     # The parameters of this formula where chosen heuristically so that low
     # numbers would approximate closely, and the byte range 0-255 would cover
     # a decent range of document lengths (i.e. 1 to ~100000).
-    return int(round(log((length/27.0)+1, 1.033)))
+    return int(round(log((length / 27.0) + 1, 1.033)))
+
 
 def _byte_to_length(n):
-    return int(round((pow(1.033, n)-1)*27))
+    return int(round((pow(1.033, n) - 1) * 27))
 
 _length_byte_cache = array("i", (_byte_to_length(i) for i in xrange(256)))
 byte_to_length = _length_byte_cache.__getitem__
+
 
 # Prefix encoding functions
 
@@ -270,7 +299,8 @@ def first_diff(a, b):
     for i in xrange(0, len(a)):
         if a[i] != b[1]:
             return i
-        if i == 255: return i
+        if i == 255:
+            return i
 
 
 def prefix_encode(a, b):
@@ -294,6 +324,7 @@ def prefix_encode_all(ls):
         yield chr(i) + w[i:].encode("utf8")
         last = w
 
+
 def prefix_decode_all(ls):
     """Decompresses a list of strings compressed by prefix_encode().
     """
@@ -306,12 +337,18 @@ def prefix_decode_all(ls):
         last = decoded
 
 
+# Natural key sorting function
+
 _nkre = re.compile(r"\D+|\d+", re.UNICODE)
+
+
 def _nkconv(i):
     try:
         return int(i)
     except ValueError:
         return i.lower()
+
+
 def natural_key(s):
     """Converts string ``s`` into a tuple that will sort "naturally" (i.e.,
     ``name5`` will come before ``name10`` and ``1`` will come before ``A``).
@@ -327,6 +364,8 @@ def natural_key(s):
     # the digit runs into ints and the non-digit runs to lowercase.
     return tuple(_nkconv(m) for m in _nkre.findall(s))
 
+
+# Mixins and decorators
 
 class ClosableMixin(object):
     """Mix-in for classes with a close() method to allow them to be used as a
@@ -350,58 +389,148 @@ def protected(func):
     def protected_wrapper(self, *args, **kwargs):
         if self.is_closed:
             raise Exception("%r has been closed" % self)
-        if self._sync_lock.acquire(False):
-            try:
-                return func(self, *args, **kwargs)
-            finally:
-                self._sync_lock.release()
-        else:
-            raise Exception("Could not acquire sync lock")
+        with self._sync_lock:
+            return func(self, *args, **kwargs)
 
     return protected_wrapper
     
 
-class LRUCache(object):
-    def __init__(self, size):
-        self.size = size
-        self.clock = []
-        for i in xrange(0, size):
-            self.clock.append([None, False])
-        self.hand = 0
-        self.data = {}
-
-    def __contains__(self, key):
-        return key in self.data
+def synchronized(func):
+    """Decorator for storage-access methods, which synchronizes on a threading
+    lock. The parent object must have 'is_closed' and '_sync_lock' attributes.
+    """
     
-    def __getitem__(self, key):
-        pos, val = self.data[key]
-        self.clock[pos][1] = True
-        self.hand = (pos + 1) % self.size
-        return val
-        
-    def __setitem__(self, key, val):
-        size = self.size
-        hand = self.hand
-        clock = self.clock
-        data = self.data
+    @wraps(func)
+    def synchronized_wrapper(self, *args, **kwargs):
+        with self._sync_lock:
+            return func(self, *args, **kwargs)
 
-        end = (hand or size) - 1
-        while True:
-            current = clock[hand]
-            ref = current[1]
-            if ref:
-                current[1] = False
-                hand = (hand + 1) % size
-            elif ref is False or hand == end:
-                oldkey = current[0]
-                if oldkey in data:
-                    del data[oldkey]
-                current[0] = key
-                current[1] = True
-                data[key] = (hand, val)
-                hand = (hand + 1) % size
-                self.hand = hand
-                return
+    return synchronized_wrapper
+
+
+def unbound_cache(func):
+    """Caching decorator with an unbounded cache size.
+    """
+    
+    cache = {}
+    
+    @wraps(func)
+    def caching_wrapper(*args):
+        try:
+            return cache[args]
+        except KeyError:
+            result = func(*args)
+            cache[args] = result
+            return result
+        
+    return caching_wrapper
+
+
+def lru_cache(maxsize=100):
+    """Least-recently-used cache decorator.
+
+    This function duplicates (more-or-less) the protocol of the
+    ``functools.lru_cache`` decorator in the Python 3.2 standard library, but
+    uses the clock face LRU algorithm instead of an ordered dictionary.
+
+    If *maxsize* is set to None, the LRU features are disabled and the cache
+    can grow without bound.
+
+    Arguments to the cached function must be hashable.
+
+    View the cache statistics named tuple (hits, misses, maxsize, currsize)
+    with f.cache_info().  Clear the cache and statistics with f.cache_clear().
+    Access the underlying function with f.__wrapped__.
+    """
+    
+    def decorating_function(user_function):
+
+        stats = [0, 0, 0]  # hits, misses
+        data = {}
+        
+        if maxsize:
+            # The keys at each point on the clock face
+            clock_keys = [None] * maxsize
+            # The "referenced" bits at each point on the clock face
+            clock_refs = array("B", (0 for _ in xrange(maxsize)))
+            lock = Lock()
+            
+            @wraps(user_function)
+            def wrapper(*args):
+                key = args
+                try:
+                    with lock:
+                        pos, result = data[key]
+                        # The key is in the cache. Set the key's reference bit
+                        clock_refs[pos] = 1
+                        # Record a cache hit
+                        stats[0] += 1
+                except KeyError:
+                    # Compute the value
+                    result = user_function(*args)
+                    with lock:
+                        # Current position of the clock hand
+                        hand = stats[2]
+                        # Remember to stop here after a full revolution
+                        end = hand
+                        # Sweep around the clock looking for a position with
+                        # the reference bit off
+                        while True:
+                            hand = (hand + 1) % maxsize
+                            current_ref = clock_refs[hand]
+                            if current_ref:
+                                # This position's "referenced" bit is set. Turn
+                                # the bit off and move on.
+                                clock_refs[hand] = 0
+                            elif not current_ref or hand == end:
+                                # We've either found a position with the
+                                # "reference" bit off or reached the end of the
+                                # circular cache. So we'll replace this
+                                # position with the new key
+                                current_key = clock_keys[hand]
+                                if current_key in data:
+                                    del data[current_key]
+                                clock_keys[hand] = key
+                                clock_refs[hand] = 1
+                                break
+                        # Put the key and result in the cache
+                        data[key] = (hand, result)
+                        # Save the new hand position
+                        stats[2] = hand
+                        # Record a cache miss
+                        stats[1] += 1
+                return result
+        
+        else:
+            @wraps(user_function)
+            def wrapper(*args):
+                key = args
+                try:
+                    result = data[key]
+                    stats[0] += 1
+                except KeyError:
+                    result = user_function(*args)
+                    data[key] = result
+                    stats[1] += 1
+                return result
+
+        def cache_info():
+            """Report cache statistics"""
+            return (stats[0], stats[1], maxsize, len(data))
+
+        def cache_clear():
+            """Clear the cache and cache statistics"""
+            data.clear()
+            stats[0] = stats[1] = stats[2] = 0
+            for i in xrange(maxsize):
+                clock_keys[i] = None
+                clock_refs[i] = 0
+
+        wrapper.cache_info = cache_info
+        wrapper.cache_clear = cache_clear
+        return wrapper
+
+    return decorating_function
 
 
 def find_object(name, blacklist=None, whitelist=None):
@@ -428,7 +557,7 @@ def find_object(name, blacklist=None, whitelist=None):
     
     assert lastdot > -1, "Name %r must be fully qualified" % name
     modname = name[:lastdot]
-    clsname = name[lastdot+1:]
+    clsname = name[lastdot + 1:]
     
     mod = __import__(modname, fromlist=[clsname])
     cls = getattr(mod, clsname)
