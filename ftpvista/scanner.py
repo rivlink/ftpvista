@@ -136,7 +136,6 @@ class FTPScanner(object):
         while len(dirs) > 0:
             try:
                 cwd, depth = dirs.pop()
-                visited.add(cwd)
 
                 if cwd in ignores:
                     self.log.info('Skipping %s' % cwd)
@@ -158,6 +157,7 @@ class FTPScanner(object):
                     raise TooDeepError(depth, cwd)
                     
                 files.extend(cwd_files)
+                visited.add(cwd)
 
                 self.log.debug('%d directories left to scan' % len(dirs))
             except ftplib.all_errors, e:
