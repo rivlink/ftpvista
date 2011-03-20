@@ -20,15 +20,35 @@ class ARPSniffer (observer.Observable):
 
     def __init__(self):
         observer.Observable.__init__(self)
+        self.terminate = False
 
     def run(self):
         """Run the sniffer"""
-        sniff(filter="arp", prn=self._arp_callback, store=0)
-    
+
+        #FIXME: horrible hack here : make sure we have the version of scapy
+        #       with the patch to stop the sniffr
+        try:
+            sniff(filter="arp", prn=self._arp_callback, store=0,
+                  stopperTimeout=1, stopper=self._stopper)
+        except TypeError, e:
+            print "Ok! This error likely happened because you are using " \
+                  + "a version of scapy without this patch : " \
+                  + "http://trac.secdev.org/scapy/wiki/PatchSelectStopperTimeout"
+
+            raise
+
+
+    def stop(self):
+        self.terminate = True
+        
     def _arp_callback(self, pkt):
         if ARP in pkt:
             self.notify_observers(pkt[ARP].psrc)
             self.notify_observers(pkt[ARP].pdst)   # FIXME : is this necessary ?
+
+
+    def _stopper(self):
+        return self.terminate
 
 
 class SnifferToPipelineAdapter (observer.Observer):
@@ -104,6 +124,8 @@ def build_machine_filter_pipeline(blacklist, valid_addr_pattern,
 
 
 if __name__ == "__main__" :
+    import signal
+
 
     VALID_ADDR_PATTERN = '^10.0.0.1|(10.(6|8|82|83|10|11).\d{0,3}.\d{0,3})$'
 
@@ -114,13 +136,18 @@ if __name__ == "__main__" :
             print "Address : %s" % ip_addr
             return True
 
-
     sniffer = ARPSniffer()
+
+    def SIGTERM_handler(signalnum, frame):
+        sniffer.stop()
 
     # setup the pipeline and bind it to the sniffer
     pipeline = build_machine_filter_pipeline([], VALID_ADDR_PATTERN, 10 * 60)
     pipeline.append_stage(EchoStage())
     SnifferToPipelineAdapter(sniffer, pipeline)
+
+    # setut the signal handler to top the sniffer on SIGTERM
+    signal.signal(signal.SIGTERM, SIGTERM_handler)
 
     # Run sniffer, run ..
     sniffer.run()
