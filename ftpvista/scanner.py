@@ -11,6 +11,15 @@ from datetime import datetime
 
 from utils import to_unicode
 
+class TooDeepError(Exception):
+    def __init__(self, depth, path):
+        self.depth = depth
+        self.path = path
+
+    def __str__(self):
+        return 'Too deep (%d levels!). Stopping at %s' % (self.depth, self.path)
+
+
 class FTPScanner(object):
     def __init__(self, host, ftp_class=ftplib.FTP):
         self.host = host
@@ -114,19 +123,19 @@ class FTPScanner(object):
 
         return files, extra_dirs
 
-    def _scan(self, ignores):
+    def _scan(self, ignores, max_depth):
         ignores = ignores or []
         ignores = set(ignores)
 
         self.connect()
 
-        dirs = set(['/'])               # paths we need to process
+        dirs = set([('/', 0)])          # (path, depth) we need to process
         visited = set()                 # paths already processed
         files = []
 
         while len(dirs) > 0:
             try:
-                cwd = dirs.pop()
+                cwd, depth = dirs.pop()
                 visited.add(cwd)
 
                 if cwd in ignores:
@@ -138,8 +147,13 @@ class FTPScanner(object):
                     continue
                 
                 cwd_files, cwd_dirs = self.list_files(cwd)
-                
-                dirs.update(cwd_dirs)
+
+                if depth < max_depth:
+                    for d in cwd_dirs:
+                        dirs.add((d, depth+1))
+                else:
+                    raise TooDeepError(depth, cwd)
+                    
                 files.extend(cwd_files)
 
                 self.log.debug('%d directories left to scan' % len(dirs))
@@ -153,10 +167,10 @@ class FTPScanner(object):
         self.disconnect()
         return files
 
-    def scan(self, ignores=None):
+    def scan(self, ignores=None, max_depth=50):
         self.log.info('Starting FTP scan.')
         try:
-            files = self._scan(ignores)
+            files = self._scan(ignores, max_depth)
             self.log.info('Scan complete.')
             return files
         except ftplib.error_perm, e:
