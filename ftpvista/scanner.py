@@ -120,18 +120,25 @@ class FTPScanner(object):
 
         self.connect()
 
-        dirs = set(['/'])
+        dirs = set(['/'])               # path we need to process
+        visited = set()                 # paths already processed
         files = []
 
         while len(dirs) > 0:
             try:
                 cwd = dirs.pop()
+                visit.add(cwd)
 
                 if cwd in ignores:
                     self.log.info('Skipping %s' % cwd)
                     continue
-
+                
+                if cwd in visited:
+                     self.log.warn('Loop detected, %s was already visited'% cwd)
+                    continue
+                
                 cwd_files, cwd_dirs = self.list_files(cwd)
+                
                 dirs.update(cwd_dirs)
                 files.extend(cwd_files)
 
