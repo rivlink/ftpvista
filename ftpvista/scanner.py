@@ -152,6 +152,9 @@ class FTPScanner(object):
                     for d in cwd_dirs:
                         dirs.add((d, depth+1))
                 else:
+                    self.log.error('The path is too deep (%d levels)' % depth)
+                    self.log.error('Stopping at %s' % cwd)
+                    self.log.error('Probably an ill-configured server.')
                     raise TooDeepError(depth, cwd)
                     
                 files.extend(cwd_files)
