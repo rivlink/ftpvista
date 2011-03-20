@@ -12,7 +12,7 @@ from whoosh import index
 from whoosh.fields import Schema, ID, IDLIST, KEYWORD, TEXT
 from whoosh.analysis import StandardAnalyzer
 from whoosh.query import Term
-from whoosh.writing import BatchWriter
+from whoosh.writing import AsyncWriter
 from whoosh.analysis import CharsetFilter, StemmingAnalyzer
 from whoosh.support.charset import accent_map
 
@@ -35,7 +35,7 @@ class Index (object):
             self._idx = index.open_dir(dir)
 
         self._searcher = self._idx.searcher()
-        self._writer = self._idx.writer()#BatchWriter(self._idx, 30, 1000)
+        self._writer = AsyncWriter(self._idx, )#Async(self._idx, 30, 1000)
 
     def get_schema(self):
         analyzer = StemmingAnalyzer('([a-zA-Z0-9])+')
@@ -67,7 +67,7 @@ class Index (object):
         """
 
         def delete_doc(serverid, path):
-            writer = self._idx.writer()
+            writer = AsyncWriter(self._idx, )
             writer.delete_by_query(Term('server_id', serverid) &
                                       Term('path', path))
             writer.commit()
@@ -142,7 +142,7 @@ class Index (object):
         self._idx.optimize()
         self.log.info('Index commited and optimized')
         
-        self._writer = self._idx.writer()
+        self._writer = AsyncWriter(self._idx, )
         self._searcher = self._idx.searcher()
         self.log.info(' -- End of Commit -- ')
         
@@ -244,7 +244,7 @@ class FetchID3TagsStage (pipeline.Stage):
                     self.log.error('%s : %r' % (path, e))
                 
                 # TODO: Il faut récupérer d'autres informations !
-                # self._persist.add_track(id3_map['title'], unicode('ftp://%s%s' % (self._server_addr, pathname2url(path.encode('utf-8')))), id3_map['performer'], id3_map['genre'], id3_map['album'], year=id3_map['year'], trackno=id3_map['track'])
+                self._persist.add_track(id3_map['title'], unicode('ftp://%s%s' % (self._server_addr, pathname2url(path.encode('utf-8')))), id3_map['performer'], id3_map['genre'], id3_map['album'], year=id3_map['year'], trackno=id3_map['track'])
 
         # Whatever the outcome of this stage,
         # continue the execution of the pipeline
@@ -295,7 +295,7 @@ def build_indexer_pipeline(server_id, server_addr, index, persist):
 class IndexUpdateCoordinator(object):
     """Coordinate the scanning and indexing of FTP servers."""
 
-    def __init__(self, persist, index, min_update_interval):
+    def __init__(self, persist, index, min_update_interval, max_depth):
         """Initialize an update coordinator.
 
         Args:
@@ -308,6 +308,7 @@ class IndexUpdateCoordinator(object):
         self._persist = persist
         self._index = index
         self._update_interval = min_update_interval
+        self._max_depth = max_depth
 
     def update_server(self, server_addr):
         """Update the server at the given address if an update is needed."""
@@ -327,7 +328,7 @@ class IndexUpdateCoordinator(object):
                                                                 server_id))
 
         scanner = FTPScanner(server_addr)
-        files = scanner.scan()
+        files = scanner.scan(max_depth=self._max_depth)
         if files == None:
             self.log.error('Impossible to scan any file, fuck it.')
             return

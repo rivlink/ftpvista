@@ -26,6 +26,7 @@ from sniffer import *
 flock = None
 context = None
 pidfile = None
+sniffer = None
 
 class PutInQueueStage (pipeline.Stage):
     """Put all the recieved  IP addresses in the specified queue"""
@@ -36,6 +37,7 @@ class PutInQueueStage (pipeline.Stage):
         self._queue.put(ip_addr)
 
 def sniffer_task(queue, blacklist, valid_ip_pattern):
+    global sniffer
     # create an ARP sniffer for discovering the hosts
     sniffer = ARPSniffer()
 
@@ -113,8 +115,9 @@ def main_daemonized(config):
     # This defines how and at which period to perform updates from the servers
     min_update_interval = config.getint('indexer', 'min_update_interval')
     
+    max_depth = config.get('indexer', 'max_depth')
     update_coordinator = IndexUpdateCoordinator(
-                           persist, index, timedelta(hours=min_update_interval))
+                           persist, index, timedelta(hours=min_update_interval), max_depth)
     
     log.info('Init done, running the update coordinator ..')
     while True:
@@ -128,8 +131,10 @@ def close_daemon():
     global flock
     global context
     destroy_pid_file()
-    flock.release()
-    context.close()
+    if flock is not None:
+        flock.release()
+    if context is not None:
+        context.close()
     os._exit(os.EX_OK)
 
 def cleanup_and_close():
@@ -143,7 +148,8 @@ def create_pid_file(pid_file):
     
 def destroy_pid_file():
     global pidfile
-    os.remove(pidfile)
+    if pidfile is not None:
+        os.remove(pidfile)
 
 def main(options):
     global flock
@@ -187,7 +193,14 @@ def main(options):
                 print ("Already launched ... exiting")
                 sys.exit(2)
             flock.acquire()
-        main_daemonized(config)
+        try:
+            main_daemonized(config)
+        except:
+            close_daemon()
+            global sniffer
+            if sniffer is not None:
+                sniffer.stop()
+            raise
 
 if __name__ == '__main__':
     parser = OptionParser(version="FTPVista 3.0")

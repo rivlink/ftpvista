@@ -142,7 +142,7 @@ class FTPScanner(object):
                     continue
                 
                 if cwd in visited:
-                     self.log.warn('Loop detected, %s was already visited'% cwd)
+                    self.log.warn('Loop detected, %s was already visited'% cwd)
                     continue
                 
                 cwd_files, cwd_dirs = self.list_files(cwd)
