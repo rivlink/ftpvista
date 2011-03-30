@@ -201,8 +201,8 @@ def main(options):
             flock.acquire()
         try:
             main_daemonized(config)
-        except:
-            log.error('Error while adding song to DB : %r' % (path, e))
+        except e:
+            log.error('Error in main : %r' % e)
             close_daemon()
             global sniffer
             if sniffer is not None:
