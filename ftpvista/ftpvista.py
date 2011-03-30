@@ -158,6 +158,12 @@ def main(options):
     config = ConfigParser.SafeConfigParser()
     config.read(options.config_file)
     
+    logging.basicConfig(level=logging.DEBUG,
+                        format='%(asctime)s %(levelname)s:%(name)s:%(message)s',
+                        filename=config.get('logs', 'main'))
+
+    log = logging.getLogger('ftpvista.main')
+    
     """Daemonize FTPVista"""
     if options.daemon:
         #Context
@@ -196,6 +202,7 @@ def main(options):
         try:
             main_daemonized(config)
         except:
+            log.error('Error while adding song to DB : %r' % (path, e))
             close_daemon()
             global sniffer
             if sniffer is not None:
