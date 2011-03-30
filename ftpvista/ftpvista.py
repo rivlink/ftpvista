@@ -201,7 +201,7 @@ def main(options):
             flock.acquire()
         try:
             main_daemonized(config)
-        except e:
+        except Exception as e:
             log.error('Error in main : %r' % e)
             close_daemon()
             global sniffer
