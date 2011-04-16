@@ -1,18 +1,29 @@
-#===============================================================================
-# Copyright 2010 Matt Chaput
-# 
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-# 
-#    http://www.apache.org/licenses/LICENSE-2.0
-# 
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#===============================================================================
+# Copyright 2010 Matt Chaput. All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+#    1. Redistributions of source code must retain the above copyright notice,
+#       this list of conditions and the following disclaimer.
+#
+#    2. Redistributions in binary form must reproduce the above copyright
+#       notice, this list of conditions and the following disclaimer in the
+#       documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY MATT CHAPUT ``AS IS'' AND ANY EXPRESS OR
+# IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
+# EVENT SHALL MATT CHAPUT OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,
+# OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+# LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+# NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+# EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+# The views and conclusions contained in the software and documentation are
+# those of the authors and should not be interpreted as representing official
+# policies, either expressed or implied, of Matt Chaput.
 
 import os
 import tempfile
@@ -31,13 +42,14 @@ from whoosh.writing import IndexWriter
 
 class SegmentWritingTask(Process):
     def __init__(self, storage, indexname, segname, kwargs, jobqueue,
-                 firstjob=None):
+                 resultqueue, firstjob=None):
         Process.__init__(self)
         self.storage = storage
         self.indexname = indexname
         self.segname = segname
         self.kwargs = kwargs
         self.jobqueue = jobqueue
+        self.resultqueue = resultqueue
         self.firstjob = firstjob
         
         self.segment = None
@@ -55,7 +67,7 @@ class SegmentWritingTask(Process):
     def run(self):
         jobqueue = self.jobqueue
         ix = self.storage.open_index(self.indexname)
-        writer = self.writer = SegmentWriter(ix, lock=False, name=self.segname,
+        writer = self.writer = SegmentWriter(ix, _lk=False, name=self.segname,
                                              **self.kwargs)
         
         if self.firstjob:
@@ -73,7 +85,7 @@ class SegmentWritingTask(Process):
             writer.pool.finish(writer.termswriter, writer.docnum,
                                writer.lengthfile)
             writer._close_all()
-            self.jobqueue.put(writer._getsegment())
+            self.resultqueue.put(writer._getsegment())
     
     def cancel(self):
         self.running = False
@@ -90,7 +102,8 @@ class MultiSegmentWriter(IndexWriter):
         
         self.segnames = []
         self.tasks = []
-        self.jobqueue = Queue()
+        self.jobqueue = Queue(self.procs * 4)
+        self.resultqueue = Queue()
         self.docbuffer = []
         
         self.writelock = ix.lock("WRITELOCK")
@@ -108,7 +121,8 @@ class MultiSegmentWriter(IndexWriter):
         self.segment_number += 1
         segmentname = Segment.basename(ix.indexname, self.segment_number)
         task = SegmentWritingTask(ix.storage, ix.indexname, segmentname,
-                                  self.kwargs, self.jobqueue, firstjob)
+                                  self.kwargs, self.jobqueue,
+                                  self.resultqueue, firstjob)
         self.tasks.append(task)
         task.start()
         return task
@@ -150,10 +164,12 @@ class MultiSegmentWriter(IndexWriter):
                 task.join()
             
             for task in self.tasks:
-                taskseg = self.jobqueue.get()
+                taskseg = self.resultqueue.get()
+                assert isinstance(taskseg, Segment), type(taskseg)
                 self.segments.append(taskseg)
             
             self.jobqueue.close()
+            self.resultqueue.close()
             
             from whoosh.filedb.fileindex import _write_toc, _clean_files
             _write_toc(self.storage, self.schema, self.index.indexname,

@@ -54,8 +54,8 @@ def check_online(config):
     logging.basicConfig(level=logging.DEBUG,
                         format='%(asctime)s %(levelname)s:%(name)s:%(message)s',
                         filename=config.get('logs', 'online_checker'))
-    log_checker = logging.getLogger('online_check')
-    log_checker.info('Starting online servers checker')
+    log = logging.getLogger('ftpvista')
+    log.info('Starting online servers checker')
     
     db_uri = config.get('db', 'uri')
     persist = ftpvista_persist.FTPVistaPersist(db_uri)
@@ -158,12 +158,6 @@ def main(options):
     config = ConfigParser.SafeConfigParser()
     config.read(options.config_file)
     
-    logging.basicConfig(level=logging.DEBUG,
-                        format='%(asctime)s %(levelname)s:%(name)s:%(message)s',
-                        filename=config.get('logs', 'main'))
-
-    log = logging.getLogger('ftpvista.main')
-    
     """Daemonize FTPVista"""
     if options.daemon:
         #Context
@@ -202,6 +196,10 @@ def main(options):
         try:
             main_daemonized(config)
         except Exception as e:
+            logging.basicConfig(level=logging.DEBUG,
+                format='%(asctime)s %(levelname)s:%(name)s:%(message)s',
+                filename=config.get('logs', 'main'))
+            log = logging.getLogger('ftpvista.main')
             log.error('Error in main : %r' % e)
             close_daemon()
             global sniffer

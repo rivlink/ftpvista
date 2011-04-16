@@ -273,7 +273,7 @@ class FTPVistaPersist(object):
 
     def launch_online_checker(self, interval=300):
         """Launch a check every 'interval' (in seconds) to verify if servers in database are online"""
-        self.log = logging.getLogger('online_check.nmaps')
+        self.log = logging.getLogger('ftpvista.nmaps')
         self._scanner = nmap_scanner.FTPFilter()
 
         while True:

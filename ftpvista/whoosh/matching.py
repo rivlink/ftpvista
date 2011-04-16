@@ -1,18 +1,29 @@
-#===============================================================================
-# Copyright 2010 Matt Chaput
-# 
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-# 
-#    http://www.apache.org/licenses/LICENSE-2.0
-# 
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#===============================================================================
+# Copyright 2010 Matt Chaput. All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+#    1. Redistributions of source code must retain the above copyright notice,
+#       this list of conditions and the following disclaimer.
+#
+#    2. Redistributions in binary form must reproduce the above copyright
+#       notice, this list of conditions and the following disclaimer in the
+#       documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY MATT CHAPUT ``AS IS'' AND ANY EXPRESS OR
+# IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
+# EVENT SHALL MATT CHAPUT OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,
+# OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+# LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+# NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+# EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+# The views and conclusions contained in the software and documentation are
+# those of the authors and should not be interpreted as representing official
+# policies, either expressed or implied, of Matt Chaput.
 
 from itertools import izip, repeat
 
@@ -298,6 +309,7 @@ class ListMatcher(Matcher):
         self._i += 1
         while self._i < len(self._ids) and self.quality() <= minquality:
             self._i += 1
+        return 0
     
     def id(self):
         return self._ids[self._i]
@@ -821,8 +833,7 @@ class UnionMatcher(AdditiveBiMatcher):
         
         # Short circuit if one matcher is inactive
         if not a.is_active():
-            sk = b.skip_to_quality(minquality)
-            return sk
+            return b.skip_to_quality(minquality)
         elif not b.is_active():
             return a.skip_to_quality(minquality)
         
@@ -980,6 +991,8 @@ class IntersectionMatcher(AdditiveBiMatcher):
                 skipped += a.skip_to_quality(minquality - bq)
             else:
                 skipped += b.skip_to_quality(minquality - aq)
+            if not a.is_active() or not b.is_active():
+                break
             if a.id() != b.id():
                 self._find_next()
             aq = a.block_quality()
@@ -1294,6 +1307,14 @@ class AndMaybeMatcher(AdditiveBiMatcher):
                 bq = b.block_quality()
         
         return skipped
+    
+    def quality(self):
+        q = 0.0
+        if self.a.is_active():
+            q += self.a.quality()
+            if self.b.is_active() and self.a.id() == self.b.id():
+                q += self.b.quality()
+        return q
     
     def weight(self):
         if self.a.id() == self.b.id():

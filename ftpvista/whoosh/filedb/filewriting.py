@@ -1,18 +1,29 @@
-#===============================================================================
-# Copyright 2007 Matt Chaput
-# 
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-# 
-#    http://www.apache.org/licenses/LICENSE-2.0
-# 
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#===============================================================================
+# Copyright 2007 Matt Chaput. All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+#    1. Redistributions of source code must retain the above copyright notice,
+#       this list of conditions and the following disclaimer.
+#
+#    2. Redistributions in binary form must reproduce the above copyright
+#       notice, this list of conditions and the following disclaimer in the
+#       documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY MATT CHAPUT ``AS IS'' AND ANY EXPRESS OR
+# IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
+# EVENT SHALL MATT CHAPUT OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,
+# OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+# LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+# NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+# EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+# The views and conclusions contained in the software and documentation are
+# those of the authors and should not be interpreted as representing official
+# policies, either expressed or implied, of Matt Chaput.
 
 from __future__ import with_statement
 from bisect import bisect_right
@@ -68,6 +79,7 @@ def OPTIMIZE(writer, segments):
     """
 
     from whoosh.filedb.filereading import SegmentReader
+    
     for seg in segments:
         reader = SegmentReader(writer.storage, writer.schema, seg)
         writer.add_reader(reader)
@@ -75,14 +87,39 @@ def OPTIMIZE(writer, segments):
     return []
 
 
+def MERGE_SQUARES(writer, segments):
+    """This is an alternative merge policy similar to Lucene's. It is less
+    optimal than the default MERGE_SMALL.
+    """
+    
+    from whoosh.filedb.filereading import SegmentReader
+    
+    sizedsegs = [(s.doc_count_all(), s) for s in segments]
+    tomerge = []
+    for size in (10, 100, 1000, 10000, 100000):
+        smaller = [seg for segsize, seg in sizedsegs
+                   if segsize < size - 1 and segsize >= size//10]
+        if len(smaller) >= 10:
+            tomerge.extend(smaller)
+            for seg in smaller:
+                segments.remove(seg)
+    
+    for seg in tomerge:
+        reader = SegmentReader(writer.storage, writer.schema, seg)
+        writer.add_reader(reader)
+        reader.close()
+    
+    return segments
+
+
 # Writer object
 
 class SegmentWriter(IndexWriter):
     def __init__(self, ix, poolclass=None, procs=0, blocklimit=128,
-                 timeout=0.0, delay=0.1, name=None, lock=True, **poolargs):
+                 timeout=0.0, delay=0.1, name=None, _lk=True, **poolargs):
         
         self.writelock = None
-        if lock:
+        if _lk:
             self.writelock = ix.lock("WRITELOCK")
             if not try_for(self.writelock.acquire, timeout=timeout, delay=delay):
                 raise LockError
@@ -375,10 +412,10 @@ class SegmentWriter(IndexWriter):
             # Use a custom merge function
             writer.commit(mergetype=my_merge_function)
         
-        :param mergetype: a custom merge function taking an Index object,
-            Writer object, and segment list as arguments, and returning a
-            new segment list. If you supply a ``mergetype`` function,
-            the values of the ``optimize`` and ``merge`` arguments are ignored.
+        :param mergetype: a custom merge function taking a Writer object and
+            segment list as arguments, and returning a new segment list. If you
+            supply a ``mergetype`` function, the values of the ``optimize`` and
+            ``merge`` arguments are ignored.
         :param optimize: if True, all existing segments are merged with the
             documents you've added to this writer (and the value of the
             ``merge`` argument is ignored).

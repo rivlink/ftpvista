@@ -1,18 +1,29 @@
-#===============================================================================
-# Copyright 2007 Matt Chaput
-# 
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-# 
-#    http://www.apache.org/licenses/LICENSE-2.0
-# 
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#===============================================================================
+# Copyright 2007 Matt Chaput. All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+#    1. Redistributions of source code must retain the above copyright notice,
+#       this list of conditions and the following disclaimer.
+#
+#    2. Redistributions in binary form must reproduce the above copyright
+#       notice, this list of conditions and the following disclaimer in the
+#       documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY MATT CHAPUT ``AS IS'' AND ANY EXPRESS OR
+# IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
+# EVENT SHALL MATT CHAPUT OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,
+# OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+# LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+# NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+# EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+# The views and conclusions contained in the software and documentation are
+# those of the authors and should not be interpreted as representing official
+# policies, either expressed or implied, of Matt Chaput.
 
 """This module contains objects that query the search index. These query
 objects are composable to form complex query trees.
@@ -34,7 +45,7 @@ from whoosh.matching import (AndMaybeMatcher, DisjunctionMaxMatcher,
 from whoosh.reading import TermNotFound
 from whoosh.support.levenshtein import relative
 from whoosh.support.times import datetime_to_long
-from whoosh.util import make_binary_tree, methodcaller
+from whoosh.util import make_binary_tree, make_weighted_tree, methodcaller
 
 
 # Exceptions
@@ -243,6 +254,28 @@ class Query(object):
                              phrases=phrases)
         return termset
 
+    def requires(self):
+        """Returns a set of queries that are *known* to be required to match
+        for the entire query to match. Note that other queries might also turn
+        out to be required but not be determinable by examining the static
+        query.
+        
+        >>> a = Term("f", u"a")
+        >>> b = Term("f", u"b")
+        >>> And([a, b]).requires()
+        set([Term("f", u"a"), Term("f", u"b")])
+        >>> Or([a, b]).requires()
+        set([])
+        >>> AndMaybe(a, b).requires()
+        set([Term("f", u"a")])
+        >>> a.requires()
+        set([Term("f", u"a")])
+        """
+        
+        # Subclasses should implement the _add_required_to(qset) method
+        
+        return set([self])
+    
     def field(self):
         """Returns the field this query matches in, or None if this query does
         not match in a single field.
@@ -337,6 +370,9 @@ class WrappingQuery(Query):
                        phrases=True):
         return self.child.existing_terms(ixreader, termset=termset,
                                          reverse=reverse, phrases=phrases)
+    
+    def requires(self):
+        return self.child.requires()
     
     def field(self):
         return self.child.field()
@@ -511,40 +547,44 @@ class CompoundQuery(Query):
         else:
             return NullQuery
 
-    def _matcher(self, matchercls, searcher, **kwargs):
+    def _matcher(self, matchercls, q_weight_fn, searcher, **kwargs):
+        # q_weight_fn is a function which is called on each query and returns a
+        # "weight" value which is used to build a huffman-like matcher tree. If
+        # q_weight_fn is None, an order-preserving binary tree is used instead.
+        
         # Pull any queries inside a Not() out into their own list
         subs, nots = self._split_queries()
         
         if not subs:
             return NullMatcher()
         
-        # Sort the list of subqueries by their estimated size
-        r = searcher.reader()
-        subs.sort(key=lambda q: q.estimate_size(r))
-        
         # Create a matcher from the list of subqueries
-        subms = [subq.matcher(searcher) for subq in subs]
-        if len(subms) == 1:
-            m = subms[0]
-        else:
+        if len(subs) == 1:
+            m = subs[0].matcher(searcher)
+        elif q_weight_fn is None:
+            subms = [q.matcher(searcher) for q in subs]
             m = make_binary_tree(matchercls, subms)
+        else:
+            subms = [(q_weight_fn(q), q.matcher(searcher)) for q in subs]
+            m = make_weighted_tree(matchercls, subms)
         
         # If there were queries inside Not(), make a matcher for them and
         # wrap the matchers in an AndNotMatcher
         if nots:
-            notms = [subq.matcher(searcher) for subq in nots]
-            if len(notms) == 1:
-                notm = notms[0]
+            if len(nots) == 1:
+                notm = nots[0].matcher(searcher)
             else:
-                notm = make_binary_tree(UnionMatcher, notms)
-                
+                notms = [(q.estimate_size(), q.matcher(searcher))
+                         for q in nots]
+                notm = make_weighted_tree(UnionMatcher, notms)
+            
             if notm.is_active():
                 m = AndNotMatcher(m, notm)
         
         # If this query had a boost, add a wrapping matcher to apply the boost
         if self.boost != 1.0:
             m = WrappingMatcher(m, self.boost)
-            
+        
         return m
 
 
@@ -600,7 +640,7 @@ class MultiTerm(Query):
             # If there's only one term, just use it
             q = qs[0]
         
-        elif len(qs) > self.TOO_MANY_CLAUSES:
+        elif self.constantscore or len(qs) > self.TOO_MANY_CLAUSES:
             # If there's so many clauses that an Or search would take forever,
             # trade memory for time and just put all the matching docs in a set
             # and serve it up as a ListMatcher
@@ -613,15 +653,7 @@ class MultiTerm(Query):
             # The default case: Or the terms together
             q = Or(qs)
         
-        m = q.matcher(searcher)
-        
-        # Multiterm queries such as Prefix are usually just about finding
-        # matching documents, not contributing to the score, so most of them
-        # have constantscore set to True by default
-        if self.constantscore:
-            m = ConstantScoreMatcher(m, score=self.boost)
-        
-        return m
+        return q.matcher(searcher)
         
 
 # Concrete classes
@@ -707,11 +739,19 @@ class And(CompoundQuery):
     JOINT = " AND "
     intersect_merge = True
 
+    def requires(self):
+        s = set()
+        for q in self.subqueries:
+            s |= q.requires()
+        return s
+        
     def estimate_size(self, ixreader):
         return min(q.estimate_size(ixreader) for q in self.subqueries)
 
     def matcher(self, searcher):
-        return self._matcher(IntersectionMatcher, searcher)
+        r = searcher.reader()
+        return self._matcher(IntersectionMatcher,
+                             lambda q: 0 - q.estimate_size(r), searcher)
 
 
 class Or(CompoundQuery):
@@ -746,8 +786,16 @@ class Or(CompoundQuery):
             norm.minmatch = self.minmatch
         return norm
 
+    def requires(self):
+        if len(self.subqueries) == 1:
+            return self.subqueries[0].requires()
+        else:
+            return set()
+
     def matcher(self, searcher):
-        return self._matcher(UnionMatcher, searcher)
+        r = searcher.reader()
+        return self._matcher(UnionMatcher, lambda q: q.estimate_size(r),
+                             searcher)
 
 
 class DisjunctionMax(CompoundQuery):
@@ -773,8 +821,16 @@ class DisjunctionMax(CompoundQuery):
             norm.tiebreak = self.tiebreak
         return norm
     
+    def requires(self):
+        if len(self.subqueries) == 1:
+            return self.subqueries[0].requires()
+        else:
+            return set()
+    
     def matcher(self, searcher):
-        return self._matcher(DisjunctionMaxMatcher, searcher,
+        r = searcher.reader()
+        return self._matcher(DisjunctionMaxMatcher,
+                             lambda q: q.estimate_size(r), searcher,
                              tiebreak=self.tiebreak)
 
 
@@ -1468,7 +1524,8 @@ class Ordered(And):
     
     def matcher(self, searcher):
         from spans import SpanBefore
-        return self._matcher(SpanBefore._Matcher, searcher)
+        
+        return self._matcher(SpanBefore._Matcher, None, searcher)
 
 
 class Every(Query):
@@ -1748,6 +1805,9 @@ class Require(BinaryQuery):
     JOINT = " REQUIRE "
     matcherclass = RequireMatcher
 
+    def requires(self):
+        return self.a.requires() | self.b.requires()
+
     def estimate_size(self, ixreader):
         return self.b.estimate_size(ixreader)
     
@@ -1783,6 +1843,9 @@ class AndMaybe(BinaryQuery):
             return a
         return self.__class__(a, b, boost=self.boost)
 
+    def requires(self):
+        return self.a.requires()
+
     def estimate_min_size(self, ixreader):
         return self.subqueries[0].estimate_min_size(ixreader)
 
@@ -1815,6 +1878,9 @@ class AndNot(BinaryQuery):
     def _existing_terms(self, ixreader, termset, reverse=False, phrases=True):
         self.a.existing_terms(ixreader, termset, reverse=reverse,
                               phrases=phrases)
+        
+    def requires(self):
+        return self.a.requires()
 
 
 class Otherwise(BinaryQuery):

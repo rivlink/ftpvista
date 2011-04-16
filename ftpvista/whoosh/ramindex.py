@@ -1,18 +1,29 @@
-#===============================================================================
-# Copyright 2011 Matt Chaput
-# 
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-# 
-#    http://www.apache.org/licenses/LICENSE-2.0
-# 
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#===============================================================================
+# Copyright 2011 Matt Chaput. All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+#    1. Redistributions of source code must retain the above copyright notice,
+#       this list of conditions and the following disclaimer.
+#
+#    2. Redistributions in binary form must reproduce the above copyright
+#       notice, this list of conditions and the following disclaimer in the
+#       documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY MATT CHAPUT ``AS IS'' AND ANY EXPRESS OR
+# IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
+# EVENT SHALL MATT CHAPUT OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,
+# OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+# LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+# NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+# EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+# The views and conclusions contained in the software and documentation are
+# those of the authors and should not be interpreted as representing official
+# policies, either expressed or implied, of Matt Chaput.
 
 from collections import defaultdict
 from bisect import bisect_left
@@ -89,8 +100,15 @@ class RamIndex(IndexReader, IndexWriter):
         return (sf for i, sf in enumerate(self.storedfields)
                 if i not in deleted)
     
+    def _test_field(self, fieldname):
+        if fieldname not in self.schema:
+            raise TermNotFound("No field %r" % fieldname)
+        if self.schema[fieldname].format is None:
+            raise TermNotFound("Field %r is not indexed" % fieldname)
+    
     @synchronized
     def field_length(self, fieldname):
+        self._test_field(fieldname)
         if fieldname not in self.schema or not self.schema[fieldname].scorable:
             return 0
         return sum(l for docnum_fieldname, l in self.fieldlengths.iteritems()
@@ -98,12 +116,14 @@ class RamIndex(IndexReader, IndexWriter):
     
     @synchronized
     def max_field_length(self, fieldname):
+        self._test_field(fieldname)
         if fieldname not in self.schema or not self.schema[fieldname].scorable:
             return 0
         return max(l for docnum_fieldname, l in self.fieldlengths.iteritems()
                    if docnum_fieldname[1] == fieldname)
     
     def doc_field_length(self, docnum, fieldname, default=0):
+        self._test_field(fieldname)
         return self.fieldlengths.get((docnum, fieldname), default)
     
     def has_vector(self, docnum, fieldname):
@@ -111,18 +131,30 @@ class RamIndex(IndexReader, IndexWriter):
     
     @synchronized
     def vector(self, docnum, fieldname):
+        if fieldname not in self.schema:
+            raise TermNotFound("No  field %r" % fieldname)
+        vformat = self.schema[fieldname].vector
+        if not vformat:
+            raise Exception("No vectors are stored for field %r" % fieldname)
+        
         vformat = self.schema[fieldname].vector
         ids, weights, values = zip(*self.vectors[docnum, fieldname])
         return ListMatcher(ids, weights, values, format=vformat)
     
     def doc_frequency(self, fieldname, text):
-        return len(self.invindex[fieldname][text])
+        self._test_field(fieldname)
+        try:
+            return len(self.invindex[fieldname][text])
+        except KeyError:
+            return 0
     
     def frequency(self, fieldname, text):
+        self._test_field(fieldname)
         return self.indexfreqs[fieldname, text]
     
     @synchronized
     def iter_from(self, fieldname, text):
+        self._test_field(fieldname)
         invindex = self.invindex
         indexfreqs = self.indexfreqs
         
@@ -137,6 +169,7 @@ class RamIndex(IndexReader, IndexWriter):
                 yield (fn, t, docfreq, indexfreq)
     
     def lexicon(self, fieldname):
+        self._test_field(fieldname)
         return sorted(self.invindex[fieldname].keys())
     
     @synchronized
@@ -151,6 +184,9 @@ class RamIndex(IndexReader, IndexWriter):
     
     @synchronized
     def first_id(self, fieldname, text):
+        # Override to not construct a posting reader, just pull the first
+        # non-deleted docnum out of the list directly
+        self._test_field(fieldname)
         try:
             plist = self.invindex[fieldname][text]
         except KeyError:
@@ -164,6 +200,7 @@ class RamIndex(IndexReader, IndexWriter):
     
     @synchronized
     def postings(self, fieldname, text, scorer=None):
+        self._test_field(fieldname)
         try:
             postings = self.invindex[fieldname][text]
         except KeyError:
@@ -218,10 +255,9 @@ class RamIndex(IndexReader, IndexWriter):
         storedvalues = {}
         
         for name in fieldnames:
+            field = schema[name]
             value = fields.get(name)
             if value:
-                field = schema[name]
-                
                 fielddict = invindex[name]
                 
                 # If the field is indexed, add the words in the value to the
@@ -245,15 +281,15 @@ class RamIndex(IndexReader, IndexWriter):
                     if field.scorable:
                         fieldlengths[self.docnum, name] = count
                         usage += 36
-                    
-            vector = field.vector
-            if vector:
-                vlist = sorted((w, weight, valuestring) for w, freq, weight, valuestring
-                               in vector.word_values(value))
-                self.vectors[self.docnum, name] = vlist
-                usage += 28
-                for x in vlist:
-                    usage += 44 + len(x[2])
+                
+                vector = field.vector
+                if vector:
+                    vlist = sorted((w, weight, valuestring) for w, freq, weight, valuestring
+                                   in vector.word_values(value))
+                    self.vectors[self.docnum, name] = vlist
+                    usage += 28
+                    for x in vlist:
+                        usage += 44 + len(x[2])
             
             if field.stored:
                 storedname = "_stored_" + name

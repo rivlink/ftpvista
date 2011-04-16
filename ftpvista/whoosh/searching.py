@@ -1,18 +1,29 @@
-#===============================================================================
-# Copyright 2007 Matt Chaput
-# 
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-# 
-#    http://www.apache.org/licenses/LICENSE-2.0
-# 
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#===============================================================================
+# Copyright 2007 Matt Chaput. All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+#    1. Redistributions of source code must retain the above copyright notice,
+#       this list of conditions and the following disclaimer.
+#
+#    2. Redistributions in binary form must reproduce the above copyright
+#       notice, this list of conditions and the following disclaimer in the
+#       documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY MATT CHAPUT ``AS IS'' AND ANY EXPRESS OR
+# IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
+# EVENT SHALL MATT CHAPUT OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,
+# OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+# LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+# NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+# EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+# The views and conclusions contained in the software and documentation are
+# those of the authors and should not be interpreted as representing official
+# policies, either expressed or implied, of Matt Chaput.
 
 """This module contains classes and functions related to searching the index.
 """
@@ -21,7 +32,7 @@
 from __future__ import division
 import copy
 import threading
-from collections import defaultdict
+from collections import defaultdict, deque
 from heapq import heappush, heapreplace
 from math import ceil
 
@@ -428,9 +439,62 @@ class Searcher(object):
         return self.search(q, limit=top, filter=comb)
 
     def search_page(self, query, pagenum, pagelen=10, **kwargs):
+        """This method is Like the :meth:`Searcher.search` method, but returns
+        a :class:`ResultsPage` object. This is a convenience function for
+        getting a certain "page" of the results for the given query, which is
+        often useful in web search interfaces.
+        
+        For example::
+        
+            querystring = request.get("q")
+            query = queryparser.parse("content", querystring)
+            
+            pagenum = int(request.get("page", 1))
+            pagelen = int(request.get("perpage", 10))
+            
+            results = searcher.search_page(query, pagenum, pagelen=pagelen)
+            print "Page %d of %d" % (results.pagenum, results.pagecount)
+            print ("Showing results %d-%d of %d" 
+                   % (results.offset + 1, results.offset + results.pagelen + 1,
+                      len(results)))
+            for hit in results:
+                print "%d: %s" % (hit.rank + 1, hit["title"])
+        
+        (Note that results.pagelen might be less than the pagelen argument if
+        there aren't enough results to fill a page.)
+        
+        Any additional keyword arguments you supply are passed through to
+        :meth:`Searcher.search`. For example, you can get paged results of a
+        sorted search::
+        
+            results = searcher.search_page(q, 2, sortedby="date", reverse=True)
+        
+        Currently, searching for page 100 with pagelen of 10 takes the same
+        amount of time as using :meth:`Searcher.search` to find the first 1000
+        results. That is, this method does not have any special optimizations
+        or efficiencies for getting a page from the middle of the full results
+        list. (A future enhancement may allow using previous page results to
+        improve the efficiency of finding the next page.)
+        
+        This method will raise a ``ValueError`` if you ask for a page number
+        higher than the number of pages in the resulting query.
+        
+        :param query: the :class:`whoosh.query.Query` object to match.
+        :param pagenum: the page number to retrieve, starting at ``1`` for the
+            first page.
+        :param pagelen: the number of results per page.
+        :returns: :class:`ResultsPage`
+        """
+        
         if pagenum < 1:
             raise ValueError("pagenum must be >= 1")
-        results = self.search(query, limit=pagenum * pagelen, **kwargs)
+        
+        # Turn off optimized to prevent items from jumping around in the order
+        # as the limit is increased (optimized results are not stable)
+        if "optimized" in kwargs:
+            del kwargs["optimized"]
+        results = self.search(query, limit=pagenum * pagelen, optimize=False,
+                              **kwargs)
         return ResultsPage(results, pagenum, pagelen)
 
     def find(self, defaultfield, querystring, **kwargs):
@@ -448,6 +512,49 @@ class Searcher(object):
         from whoosh.sorting import Sorter
         
         return Sorter(self, *args, **kwargs)
+
+    def sort_query_using(self, q, fn, filter=None):
+        """Returns a :class:`Results` object with the documents matching the
+        given query ordered according score returned by the given function.
+        
+        The function is called for each matching document with two arguments:
+        this searcher and the document number. The function can usually only
+        work with information that can be accessed based on the document
+        number, such as stored fields, term vectors, and field caches.
+        
+        For example, assume an index where the "text" field was indexed with
+        term vectors. The following function loads the term vector for each
+        document and ranks documents containing equal occurrences of the terms
+        "love" and "hate" highest::
+        
+            def fn(searcher, docnum):
+                # Create a dictionary of term text to frequency
+                v = dict(searcher.vector_as("frequency", docnum, "text"))
+                # Give highest scores to documents that have equal numbers
+                # of the two terms
+                return 1.0 / (abs(v["love"] - v["hate"]) + 1.0)
+            
+            with myindex.searcher() as s:
+                q = And([Term("text", u"love"), Term("text", u"hate")])
+                results = s.sort_query_using(q, fn)
+        
+        (Note that the "function" can be an object with a ``__call__`` method.
+        This may be useful for sharing information between calls.)
+        
+        :param q: the query to run.
+        :param fn: a function to run on each document number to determine the
+            document's "score". Higher values appear earlier in the results.
+        :param filter: a query, Results object, or set of docnums. The results
+            will only contain documents that are also in the filter object.
+        """
+        
+        t = now()
+        comb = self._filter_to_comb(filter)
+        ls = [(fn(self, docnum), docnum) for docnum in self.docs_for_query(q)
+              if (not comb) or docnum in comb]
+        docset = set(docnum for _, docnum in ls)
+        ls.sort(key=lambda x: (0 - x[0], x[1]))
+        return Results(self, q, ls, docset, runtime=now() - t)
 
     def define_facets(self, name, qs, save=False):
         def doclists_for_searcher(s):
@@ -481,6 +588,11 @@ class Searcher(object):
         """Runs the query represented by the ``query`` object and returns a
         Results object.
         
+        When using optimizations, the order of results with very similar scores
+        can change as the limit changes. To ensure a stable ordering of
+        documents no matter what the value of ``limit``, use
+        ``optimize=False``.
+        
         :param query: a :class:`whoosh.query.Query` object.
         :param limit: the maximum number of documents to score. If you're only
             interested in the top N documents, you can set limit=N to limit the
@@ -489,17 +601,16 @@ class Searcher(object):
             names to sort by multiple fields. This is a shortcut for using a
             :class:`whoosh.sorting.Sorter` object to do a simple sort. To do
             complex sorts (where different fields are sorted in different
-            directions), use :meth:`Searcher.sorter` to get a sorter and use
-            it to perform the sorted search.
-        :param reverse: if ``sortedby`` is not None, this reverses the
-            direction of the sort.
+            directions), use :meth:`Searcher.sorter` to get a sorter and use it
+            to perform the sorted search.
+        :param reverse: Reverses the direction of the sort.
         :param groupedby: a list of field names or facet names. If this
             argument is not None, you can use the :meth:`Results.groups` method
             on the results object to retrieve a dictionary mapping field/facet
             values to document numbers.
         :param optimize: use optimizations to get faster results when possible.
         :param scored: if False, the results are not scored and are returned in
-            "natural" order (the order in which they were added).
+            "natural" order.
         :param collector: (expert) an instance of :class:`Collector` to use to
             collect the found documents.
         :param filter: a query, Results object, or set of docnums. The results
@@ -511,28 +622,30 @@ class Searcher(object):
             raise ValueError("limit must be >= 1")
 
         if sortedby is not None:
-            return self.sorter(sortedby=sortedby).sort_query(q, limit=limit,
-                                                             reverse=reverse,
-                                                             filter=filter)
+            sorter = self.sorter(sortedby=sortedby)
+            return sorter.sort_query(q, limit=limit, reverse=reverse,
+                                     filter=filter)
         
         if isinstance(groupedby, basestring):
             groupedby = (groupedby, )
         
         if collector is None:
             collector = Collector(limit=limit, usequality=optimize,
-                                  groupedby=groupedby, scored=scored)
+                                  groupedby=groupedby, scored=scored,
+                                  reverse=reverse)
         else:
             collector.limit = limit
             collector.usequality = optimize
             collector.groupedby = groupedby
             collector.scored = scored
+            collector.reverse = reverse
         
         return collector.search(self, q, filter=filter)
         
 
 class Collector(object):
     def __init__(self, limit=10, usequality=True, replace=10, groupedby=None,
-                 scored=True, timelimit=None, greedy=False):
+                 scored=True, timelimit=None, greedy=False, reverse=False):
         """A Collector finds the matching documents, scores them, collects them
         into a list, and produces a Results object from them.
         
@@ -582,10 +695,16 @@ class Collector(object):
         self.scored = scored
         self.timelimit = timelimit
         self.greedy = greedy
+        self.reverse = reverse
         
+        self.reset()
+        
+    def reset(self):
+        if self.should_add_all():
+            self._items = deque()
+        else:
+            self._items = []
         self.groups = {}
-        self._items = []
-        self._groups = {}
         self.docset = set()
         self.done = False
         self.minquality = None
@@ -603,6 +722,7 @@ class Collector(object):
         this method on a top-level searcher.
         """
         
+        self.reset()
         self._searcher = searcher
         self._q = q
         
@@ -626,7 +746,9 @@ class Collector(object):
                 if self.timesup:
                     raise TimeLimit
                 self.doc_offset = offset
-                self.add_searcher(s, q)
+                done = self.add_searcher(s, q)
+                if done:
+                    break
         else:
             self.add_searcher(searcher, q)
             
@@ -654,7 +776,7 @@ class Collector(object):
         the collector. This is called by the :meth:`Collector.search` method.
         """
         
-        self.add_matches(searcher, q.matcher(searcher))
+        return self.add_matches(searcher, q.matcher(searcher))
     
     def score(self, searcher, matcher):
         """Called to compute the score for the current document in the given
@@ -675,8 +797,9 @@ class Collector(object):
         :param id: the document number of the document.
         """
         
-        # This method is only called by add_all_matches
-        self._items.append((score, id))
+        # This method is only called by add_all_matches. Note: the document
+        # number is negated to match the output of add_top_matches
+        self._items.append((score, 0 - id))
         self.docset.add(id)
     
     def should_add_all(self):
@@ -691,9 +814,6 @@ class Collector(object):
         """Calls either :meth:Collector.add_top_matches` or
         :meth:`Collector.add_all_matches` depending on whether this collector
         needs to examine all documents.
-        
-        This method should record the current document as a hit for later
-        retrieval with :meth:`Collector.items`.
         """
         
         if self.should_add_all():
@@ -715,6 +835,10 @@ class Collector(object):
         timelimited = bool(self.timelimit)
         greedy = self.greedy
         
+        # Note that document numbers are negated before putting them in the
+        # heap so that higher document numbers have lower "priority" in the
+        # queue. Lower document numbers should always come before higher
+        # document numbers with the same score to keep the order stable.
         for id, quality in self.pull_matches(matcher, usequality):
             if timelimited and not greedy and self.timesup:
                 raise TimeLimit
@@ -725,16 +849,16 @@ class Collector(object):
             
             if len(items) < limit:
                 # The heap isn't full, so just add this document
-                heappush(items, (score(searcher, matcher), offsetid, quality))
+                heappush(items, (score(searcher, matcher), 0 - offsetid, quality))
             
-            elif quality > self.minquality:
+            elif not usequality or quality > self.minquality:
                 # The heap is full, but the posting quality indicates
                 # this document is good enough to make the top N, so
                 # calculate its true score and add it to the heap
                 
                 s = score(searcher, matcher)
                 if s > items[0][0]:
-                    heapreplace(items, (s, offsetid, quality))
+                    heapreplace(items, (s, 0 - offsetid, quality))
                     self.minquality = items[0][2]
                     
             if timelimited and self.timesup:
@@ -746,14 +870,18 @@ class Collector(object):
         """
         
         offset = self.doc_offset
+        limit = self.limit
+        items = self._items
         scored = self.scored
         score = self.score
         comb = self._comb
         timelimited = bool(self.timelimit)
         greedy = self.greedy
+        reverse = self.reverse
         
         keyfns = None
         if self.groupedby:
+            limit = None
             keyfns = {}
             for name in self.groupedby:
                 keyfns[name] = searcher.reader().key_fn(name)
@@ -773,10 +901,16 @@ class Collector(object):
                     key = keyfn(id)
                     self.groups[name][key].append(id)
             
-            scr = None
+            scr = 0
             if scored:
                 scr = score(searcher, matcher)
             self.collect(scr, offsetid)
+            
+            if limit:
+                if reverse and len(items) > limit:
+                    items.popleft()
+                elif (not reverse) and len(items) >= limit:
+                    return True
             
             if timelimited and self.timesup:
                 raise TimeLimit
@@ -842,13 +976,17 @@ class Collector(object):
         """Returns the collected hits as a list of (score, docid) pairs.
         """
         
-        # Turn the heap into a sorted list by sorting by score first (subtract
-        # from 0 to put highest scores first) and then by document number (to
-        # enforce a consistent ordering of documents with equal score)
-        items = self._items
-        if self.scored:
-            items = sorted(self._items, key=lambda x: (0 - x[0], x[1]))
-        return [(item[0], item[1]) for item in items]
+        # Docnums are stored as negative for reasons too obscure to go into
+        # here, re-negate them before returning
+        items = [(x[0], 0 - x[1]) for x in self._items]
+        
+        # Sort by negated scores so that higher scores go first, then by
+        # document number to keep the order stable when documents have the same
+        # score
+        if self.scored or self.reverse:
+            items.sort(key=lambda x: (0 - x[0], x[1]), reverse=self.reverse)
+        
+        return items
     
     def results(self, runtime=None):
         """Returns the collected hits as a :class:`Results` object.
@@ -1214,8 +1352,8 @@ class Results(object):
             return
 
         otherdocs = results.docs()
-        items = [item for item in self.top_n if item[1] not in otherdocs]
-        self.docset = self.docs() - otherdocs
+        items = [item for item in self.top_n if item[1] in otherdocs]
+        self.docset = self.docs() & otherdocs
         self.top_n = items
         
     def upgrade(self, results, reverse=False):
@@ -1401,8 +1539,8 @@ class Hit(object):
         :param normalize: whether to normalize term weights.
         """
         
-        return self.searcher.more_like(self.docnum, text=text, top=top,
-                                       numterms=numterms, model=model,
+        return self.searcher.more_like(self.docnum, fieldname, text=text,
+                                       top=top, numterms=numterms, model=model,
                                        normalize=normalize)
     
     def __repr__(self):

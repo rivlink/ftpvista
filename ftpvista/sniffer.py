@@ -28,8 +28,7 @@ class ARPSniffer (observer.Observable):
         #FIXME: horrible hack here : make sure we have the version of scapy
         #       with the patch to stop the sniffr
         try:
-            sniff(filter="arp", prn=self._arp_callback, store=0,
-                  stopperTimeout=1, stopper=self._stopper)
+            sniff(filter="arp", prn=self._arp_callback, store=0, stop_filter=self._stopper)
         except TypeError, e:
             print "Ok! This error likely happened because you are using " \
                   + "a version of scapy without this patch : " \
@@ -47,7 +46,7 @@ class ARPSniffer (observer.Observable):
             self.notify_observers(pkt[ARP].pdst)   # FIXME : is this necessary ?
 
 
-    def _stopper(self):
+    def _stopper(self, _):
         return self.terminate
 
 
