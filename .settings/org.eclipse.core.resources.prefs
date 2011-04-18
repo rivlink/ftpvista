@@ -1,6 +1,8 @@
-#Thu Mar 03 15:49:45 CET 2011
+#Sun Mar 20 17:29:36 CET 2011
 eclipse.preferences.version=1
 encoding//ftpvista/ftpvista.py=utf-8
 encoding//ftpvista/index.py=utf-8
 encoding//ftpvista/persist.py=utf-8
+encoding//ftpvista/scanner.py=utf-8
+encoding//ftpvista/sniffer.py=utf-8
 encoding//ftpvista/whoosh/analysis.py=utf8
