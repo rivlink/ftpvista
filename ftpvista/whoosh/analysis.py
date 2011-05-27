@@ -107,6 +107,34 @@ def unstopped(tokenstream):
     return (t for t in tokenstream if not t.stopped)
 
 
+def entoken(textstream, positions=False, chars=False, start_pos=0,
+            start_char=0, **kwargs):
+    """Takes a sequence of unicode strings and yields a series of Token objects
+    (actually the same Token object over and over, for performance reasons),
+    with the attributes filled in with reasonable values (for example, if
+    ``positions`` or ``chars`` is True, the function assumes each token was
+    separated by one space).
+    """
+    
+    pos = start_pos
+    char = start_char
+    t = Token(positions=positions, chars=chars, **kwargs)
+    
+    for text in textstream:
+        t.text = text
+        
+        if positions:
+            t.pos = pos
+            pos += 1
+        
+        if chars:
+            t.startchar = char
+            char = char + len(text)
+            t.endchar = char
+        
+        yield t
+
+
 # Token object
 
 class Token(object):
@@ -670,7 +698,7 @@ class StopFilter(Filter):
     >>> rext = RegexTokenizer()
     >>> stream = rext(u"this is a test")
     >>> stopper = StopFilter()
-    >>> [token.text for token in sopper(stream)]
+    >>> [token.text for token in stopper(stream)]
     [u"this", u"test"]
     
     """
@@ -682,7 +710,7 @@ class StopFilter(Filter):
         """
         :param stoplist: A collection of words to remove from the stream.
             This is converted to a frozenset. The default is a list of
-            common stop words.
+            common English stop words.
         :param minsize: The minimum length of token texts. Tokens with
             text smaller than this will be stopped.
         :param maxsize: The maximum length of token texts. Tokens with text
@@ -833,7 +861,7 @@ class StemFilter(Filter):
 
 
 class PyStemmerFilter(StemFilter):
-    """This is a simple sublcass of StemFilter that works with the py-stemmer
+    """This is a simple subclass of StemFilter that works with the py-stemmer
     third-party library. You must have the py-stemmer library installed to use
     this filter.
     
@@ -1545,7 +1573,7 @@ class DoubleMetaphoneFilter(Filter):
                 
 
 class SubstitutionFilter(Filter):
-    """Performas a regular expression substitution on the token text.
+    """Performs a regular expression substitution on the token text.
     
     This is especially useful for removing text from tokens, for example
     hyphens::
@@ -1659,14 +1687,14 @@ IDAnalyzer.__inittypes__ = dict(lowercase=bool)
 
 
 def KeywordAnalyzer(lowercase=False, commas=False):
-    """Parses space-separated tokens.
+    """Parses whitespace- or comma-separated tokens.
     
     >>> ana = KeywordAnalyzer()
     >>> [token.text for token in ana(u"Hello there, this is a TEST")]
     [u"Hello", u"there,", u"this", u"is", u"a", u"TEST"]
     
     :param lowercase: whether to lowercase the tokens.
-    :param commas: if True, items are separated by commas rather than spaces.
+    :param commas: if True, items are separated by commas rather than whitespace.
     """
     
     if commas:
