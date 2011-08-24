@@ -41,7 +41,7 @@ def sniffer_task(queue, blacklist, valid_ip_pattern):
     # create an ARP sniffer for discovering the hosts
     sniffer = ARPSniffer()
 
-    # Bind the sniffer to a filtering pipeline to discard unintersting IP
+    # Bind the sniffer to a filtering pipeline to discard uninteresting IP
     pipeline = build_machine_filter_pipeline(blacklist, valid_ip_pattern,
                                              drop_duplicate_timeout=10*60)
     pipeline.append_stage(PutInQueueStage(queue))
