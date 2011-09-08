@@ -147,6 +147,7 @@ class Index (object):
         self.log.info(' -- End of Commit -- ')
         
     def close(self):
+        self._writer.commit()
         """ Close the index """
         self._idx.close()
 
