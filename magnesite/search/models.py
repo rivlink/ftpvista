@@ -33,7 +33,7 @@ def search(query, limit=1000):
                                "audio_album"],
                               schema=index.schema)
     parser.add_plugin(PhrasePlugin)
-    parser.add_plugin(SingleQuotesPlugin)
+    parser.add_plugin(SingleQuotePlugin)
     parser.add_plugin(PrefixPlugin)
     parser.add_plugin(RangePlugin)
     parser.remove_plugin_class(WildcardPlugin)
