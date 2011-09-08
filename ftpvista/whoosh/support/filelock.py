@@ -27,28 +27,29 @@
 
 """
 This module contains classes implementing exclusive locks for platforms with
-fcntl (UNIX and Mac OS X) and Windows. Whoosh originally used directory creation
-as a locking method, but it had the problem that if the program crashed the
-lock directory was left behind and would keep the index locked until it was
-cleaned up. Using OS-level file locks fixes this.
+fcntl (UNIX and Mac OS X) and Windows. Whoosh originally used directory
+creation as a locking method, but it had the problem that if the program
+crashed the lock directory was left behind and would keep the index locked
+until it was cleaned up. Using OS-level file locks fixes this.
 """
 
 import errno
 import os
+import sys
 import time
 
 
 def try_for(fn, timeout=5.0, delay=0.1):
-    """Calls ``fn`` every ``delay`` seconds until it returns True or ``timeout``
-    seconds elapse. Returns True if the lock was acquired, or False if the
-    timeout was reached.
+    """Calls ``fn`` every ``delay`` seconds until it returns True or
+    ``timeout`` seconds elapse. Returns True if the lock was acquired, or False
+    if the timeout was reached.
 
     :param timeout: Length of time (in seconds) to keep retrying to acquire the
         lock. 0 means return immediately. Only used when blocking is False.
     :param delay: How often (in seconds) to retry acquiring the lock during
         the timeout period. Only used when blocking is False and timeout > 0.
     """
-    
+
     until = time.time() + timeout
     v = fn()
     while not v and time.time() < until:
@@ -60,19 +61,19 @@ def try_for(fn, timeout=5.0, delay=0.1):
 class LockBase(object):
     """Base class for file locks.
     """
-    
+
     def __init__(self, filename):
         self.fd = None
         self.filename = filename
         self.locked = False
-    
+
     def __del__(self):
         if hasattr(self, "fd") and self.fd:
             try:
                 self.release()
             except:
                 pass
-    
+
     def acquire(self, blocking=False):
         """Acquire the lock. Returns True if the lock was acquired.
         
@@ -81,38 +82,39 @@ class LockBase(object):
             actually just a delay of 10 seconds, rechecking every second.
         """
         pass
-    
+
     def release(self):
         pass
-    
-    
+
+
 class FcntlLock(LockBase):
     """File lock based on UNIX-only fcntl module.
     """
-    
+
     def acquire(self, blocking=False):
-        import fcntl
-        
+        import fcntl  #@UnresolvedImport
+
         flags = os.O_CREAT | os.O_WRONLY
         self.fd = os.open(self.filename, flags)
-        
+
         mode = fcntl.LOCK_EX
         if not blocking:
             mode |= fcntl.LOCK_NB
-        
+
         try:
             fcntl.flock(self.fd, mode)
             self.locked = True
             return True
-        except IOError, e:
+        except IOError:
+            e = sys.exc_info()[1]
             if e.errno not in (errno.EAGAIN, errno.EACCES):
                 raise
             os.close(self.fd)
             self.fd = None
             return False
-        
+
     def release(self):
-        import fcntl
+        import fcntl  #@UnresolvedImport
         fcntl.flock(self.fd, fcntl.LOCK_UN)
         os.close(self.fd)
         self.fd = None
@@ -121,31 +123,32 @@ class FcntlLock(LockBase):
 class MsvcrtLock(LockBase):
     """File lock based on Windows-only msvcrt module.
     """
-    
+
     def acquire(self, blocking=False):
-        import msvcrt
-        
+        import msvcrt  #@UnresolvedImport
+
         flags = os.O_CREAT | os.O_WRONLY
         mode = msvcrt.LK_NBLCK
         if blocking:
             mode = msvcrt.LK_LOCK
-            
+
         self.fd = os.open(self.filename, flags)
         try:
             msvcrt.locking(self.fd, mode, 1)
             return True
-        except IOError, e:
+        except IOError:
+            e = sys.exc_info()[1]
             if e.errno not in (errno.EAGAIN, errno.EACCES, errno.EDEADLK):
                 raise
             os.close(self.fd)
             self.fd = None
             return False
-        
+
     def release(self):
+        import msvcrt  #@UnresolvedImport
+
         if self.fd is None:
             raise Exception("Lock was not acquired")
-        
-        import msvcrt
         msvcrt.locking(self.fd, msvcrt.LK_UNLCK, 1)
         os.close(self.fd)
         self.fd = None
@@ -155,6 +158,3 @@ if os.name == "nt":
     FileLock = MsvcrtLock
 else:
     FileLock = FcntlLock
-
-
-

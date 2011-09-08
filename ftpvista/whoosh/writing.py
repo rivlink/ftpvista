@@ -30,7 +30,7 @@ import threading
 import time
 
 from whoosh.store import LockError
-from whoosh.util import synchronized
+from whoosh.util import abstractmethod, synchronized
 
 
 # Exceptions
@@ -47,22 +47,27 @@ class IndexWriter(object):
     To get a writer for a particular index, call
     :meth:`~whoosh.index.Index.writer` on the Index object.
     
-    >>> writer = my_index.writer()
+    >>> writer = myindex.writer()
     
     You can use this object as a context manager. If an exception is thrown
-    from within the context it calls cancel(), otherwise it calls commit() when
-    the context exits.
-    """
+    from within the context it calls :meth:`~IndexWriter.cancel` to clean up
+    temporary files, otherwise it calls :meth:`~IndexWriter.commit` when the
+    context exits.
     
+    >>> with myindex.writer() as w:
+    ...     w.add_document(title="First document", content="Hello there.")
+    ...     w.add_document(title="Second document", content="This is easy!")
+    """
+
     def __enter__(self):
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         if exc_type:
             self.cancel()
         else:
             self.commit()
-    
+
     def add_field(self, fieldname, fieldtype, **kwargs):
         """Adds a field to the index's schema.
         
@@ -70,29 +75,30 @@ class IndexWriter(object):
         :param fieldtype: an instantiated :class:`whoosh.fields.FieldType`
             object.
         """
-        
+
         self.schema.add(fieldname, fieldtype, **kwargs)
-    
+
     def remove_field(self, fieldname, **kwargs):
         """Removes the named field from the index's schema. Depending on the
         backend implementation, this may or may not actually remove existing
         data for the field from the index. Optimizing the index should always
         clear out existing data for a removed field.
         """
-        
+
         self.schema.remove(fieldname, **kwargs)
-        
+
+    @abstractmethod
     def reader(self, **kwargs):
         """Returns a reader for the existing index.
         """
-        
+
         raise NotImplementedError
-    
+
     def searcher(self, **kwargs):
         from whoosh.searching import Searcher
-        
+
         return Searcher(self.reader(), **kwargs)
-    
+
     def delete_by_term(self, fieldname, text, searcher=None):
         """Deletes any documents containing "term" in the "fieldname" field.
         This is useful when you have an indexed field containing a unique ID
@@ -100,23 +106,23 @@ class IndexWriter(object):
         
         :returns: the number of documents deleted.
         """
-        
+
         from whoosh.query import Term
-        
+
         q = Term(fieldname, text)
         return self.delete_by_query(q, searcher=searcher)
-    
+
     def delete_by_query(self, q, searcher=None):
         """Deletes any documents matching a query object.
         
         :returns: the number of documents deleted.
         """
-        
+
         if searcher:
             s = searcher
         else:
             s = self.searcher()
-        
+
         try:
             count = 0
             for docnum in s.docs_for_query(q):
@@ -126,14 +132,16 @@ class IndexWriter(object):
         finally:
             if not searcher:
                 s.close()
-        
+
         return count
-    
+
+    @abstractmethod
     def delete_document(self, docnum, delete=True):
         """Deletes a document by number.
         """
         raise NotImplementedError
-    
+
+    @abstractmethod
     def add_document(self, **fields):
         """The keyword arguments map field names to the values to index/store::
         
@@ -159,7 +167,7 @@ class IndexWriter(object):
         Instead of a single object (i.e., unicode string, number, or datetime),
         you can supply a list or tuple of objects. For unicode strings, this
         bypasses the field's analyzer. For numbers and dates, this lets you add
-        multiple values for the given field.
+        multiple values for the given field::
         
             date1 = datetime.now()
             date2 = datetime(2005, 12, 25)
@@ -174,21 +182,51 @@ class IndexWriter(object):
         keyword arguments like this::
         
             writer.add_document(title=u"a b c", _stored_title=u"e f g")
+        
+        You can boost the weight of all terms in a certain field by specifying
+        a ``_<fieldname>_boost`` keyword argument. For example, if you have a
+        field named "content", you can double the weight of this document for
+        searches in the "content" field like this::
+        
+            writer.add_document(content="a b c", _title_boost=2.0)
             
+        You can boost every field at once using the ``_boost`` keyword. For
+        example, to boost fields "a" and "b" by 2.0, and field "c" by 3.0::
+        
+            writer.add_document(a="alfa", b="bravo", c="charlie",
+                                _boost=2.0, _c_boost=3.0)
+        
+        Note that some scoring algroithms, including Whoosh's default BM25F,
+        do not work with term weights less than 1, so you should generally not
+        use a boost factor less than 1.
+        
         See also :meth:`Writer.update_document`.
         """
-        
+
         raise NotImplementedError
-    
+
+    def _doc_boost(self, fields, default=1.0):
+        if "_boost" in fields:
+            return float(fields["_boost"])
+        else:
+            return default
+
+    def _field_boost(self, fields, fieldname, default=1.0):
+        boostkw = "_%s_boost" % fieldname
+        if boostkw in fields:
+            return float(fields[boostkw])
+        else:
+            return default
+
     def _unique_fields(self, fields):
         # Check which of the supplied fields are unique
         unique_fields = [name for name, field in self.schema.items()
                          if name in fields and field.unique]
         if not unique_fields:
             raise IndexingError("None of the fields in %r"
-                                " are unique" % fields.keys())
+                                " are unique" % list(fields.keys()))
         return unique_fields
-    
+
     def update_document(self, **fields):
         """The keyword arguments map field names to the values to index/store.
         
@@ -213,7 +251,8 @@ class IndexWriter(object):
         It is safe to use ``update_document`` in place of ``add_document``; if
         there is no existing document to replace, it simply does an add.
         
-        You cannot currently pass a list or tuple of values to a "unique" field.
+        You cannot currently pass a list or tuple of values to a "unique"
+        field.
         
         Because this method has to search for documents with the same unique
         fields and delete them before adding the new document, it is slower
@@ -236,57 +275,55 @@ class IndexWriter(object):
         ...this will add two documents with the same value of ``unique_id``,
         instead of the second document replacing the first.
         
-        For fields that are both indexed and stored, you can specify an
-        alternate value to store using a keyword argument in the form
-        "_stored_<fieldname>". For example, if you have a field named "title"
-        and you want to index the text "a b c" but store the text "e f g", use
-        keyword arguments like this::
-        
-            writer.update_document(title=u"a b c", _stored_title=u"e f g")
+        See :meth:`Writer.add_document` for information on
+        ``_stored_<fieldname>``, ``_<fieldname>_boost``, and ``_boost`` keyword
+        arguments.
         """
-        
+
         # Delete the set of documents matching the unique terms
         unique_fields = self._unique_fields(fields)
         with self.searcher() as s:
             for docnum in s._find_unique([(name, fields[name])
                                           for name in unique_fields]):
                 self.delete_document(docnum)
-        
+
         # Add the given fields
         self.add_document(**fields)
-    
+
     def commit(self):
         """Finishes writing and unlocks the index.
         """
         pass
-        
+
     def cancel(self):
         """Cancels any documents/deletions added by this object
         and unlocks the index.
         """
         pass
-    
+
 
 class PostingWriter(object):
+    @abstractmethod
     def start(self, format):
         """Start a new set of postings for a new term. Implementations may
         raise an exception if this is called without a corresponding call to
         finish().
         """
         raise NotImplementedError
-    
+
+    @abstractmethod
     def write(self, id, weight, valuestring):
         """Add a posting with the given ID and value.
         """
         raise NotImplementedError
-    
+
     def finish(self):
         """Finish writing the postings for the current term. Implementations
         may raise an exception if this is called without a preceding call to
         start().
         """
         pass
-    
+
     def close(self):
         """Finish writing all postings and close the underlying file.
         """
@@ -319,7 +356,7 @@ class AsyncWriter(threading.Thread, IndexWriter):
     >>> from whoosh.writing import AsyncWriter
     >>> writer = AsyncWriter(myindex, )
     """
-    
+
     def __init__(self, index, delay=0.25, writerargs=None):
         """
         :param index: the :class:`whoosh.index.Index` to write to.
@@ -328,7 +365,7 @@ class AsyncWriter(threading.Thread, IndexWriter):
         :param writerargs: an optional dictionary specifying keyword arguments
             to to be passed to the index's ``writer()`` method.
         """
-        
+
         threading.Thread.__init__(self)
         self.running = False
         self.index = index
@@ -339,20 +376,20 @@ class AsyncWriter(threading.Thread, IndexWriter):
             self.writer = self.index.writer(**self.writerargs)
         except LockError:
             self.writer = None
-    
+
     def reader(self):
         return self.index.reader()
-    
+
     def searcher(self, **kwargs):
         from whoosh.searching import Searcher
         return Searcher(self.reader(), fromindex=self.index, **kwargs)
-    
+
     def _record(self, method, args, kwargs):
         if self.writer:
             getattr(self.writer, method)(*args, **kwargs)
         else:
             self.events.append((method, args, kwargs))
-    
+
     def run(self):
         self.running = True
         writer = self.writer
@@ -364,36 +401,36 @@ class AsyncWriter(threading.Thread, IndexWriter):
         for method, args, kwargs in self.events:
             getattr(writer, method)(*args, **kwargs)
         writer.commit(*self.commitargs, **self.commitkwargs)
-    
+
     def delete_document(self, *args, **kwargs):
         self._record("delete_document", args, kwargs)
-    
+
     def add_document(self, *args, **kwargs):
         self._record("add_document", args, kwargs)
-        
+
     def update_document(self, *args, **kwargs):
         self._record("update_document", args, kwargs)
-    
+
     def add_field(self, *args, **kwargs):
         self._record("add_field", args, kwargs)
-        
+
     def remove_field(self, *args, **kwargs):
         self._record("remove_field", args, kwargs)
-    
+
     def delete_by_term(self, *args, **kwargs):
         self._record("delete_by_term", args, kwargs)
-    
+
     def commit(self, *args, **kwargs):
         if self.writer:
             self.writer.commit(*args, **kwargs)
         else:
             self.commitargs, self.commitkwargs = args, kwargs
             self.start()
-    
+
     def cancel(self, *args, **kwargs):
         if self.writer:
             self.writer.cancel(*args, **kwargs)
-    
+
 
 class BufferedWriter(IndexWriter):
     """Convenience class that acts like a writer but buffers added documents to
@@ -464,7 +501,7 @@ class BufferedWriter(IndexWriter):
         :param commitargs: dictionary specifying keyword arguments to be passed
             to the writer's ``commit()`` method when committing a writer.
         """
-        
+
         self.index = index
         self.period = period
         self.limit = limit
@@ -472,11 +509,11 @@ class BufferedWriter(IndexWriter):
         self.commitargs = commitargs or {}
         self._sync_lock = threading.RLock()
         self._write_lock = threading.Lock()
-        
+
         if tempixclass is None:
             from whoosh.ramindex import RamIndex as tempixclass
         self.tempixclass = tempixclass
-        
+
         self.writer = None
         self.base = self.index.doc_count_all()
         self.bufferedcount = 0
@@ -484,16 +521,16 @@ class BufferedWriter(IndexWriter):
         self.ramindex = self._create_ramindex()
         if self.period:
             self.timer = threading.Timer(self.period, self.commit)
-    
+
     def __del__(self):
         if hasattr(self, "writer") and self.writer:
             if not self.writer.is_closed:
                 self.writer.cancel()
             del self.writer
-    
+
     def _create_ramindex(self):
         return self.tempixclass(self.index.schema)
-    
+
     def _get_writer(self):
         if self.writer is None:
             self.writer = self.index.writer(**self.writerargs)
@@ -501,11 +538,11 @@ class BufferedWriter(IndexWriter):
             self.base = self.index.doc_count_all()
             self.bufferedcount = 0
         return self.writer
-    
+
     @synchronized
     def reader(self, **kwargs):
         from whoosh.reading import MultiReader
-        
+
         writer = self._get_writer()
         ramreader = self.ramindex
         if self.index.is_empty():
@@ -517,60 +554,61 @@ class BufferedWriter(IndexWriter):
             else:
                 reader.add_reader(ramreader)
             return reader
-    
+
     def searcher(self, **kwargs):
         from whoosh.searching import Searcher
-        
+
         return Searcher(self.reader(), fromindex=self.index, **kwargs)
-    
+
     def close(self):
         self.commit(restart=False)
-    
+
     def commit(self, restart=True):
         if self.period:
             self.timer.cancel()
-        
+
         # Replace the RAM index
         with self._sync_lock:
             oldramindex = self.ramindex
             self.ramindex = self._create_ramindex()
-        
+
         with self._write_lock:
             if self.bufferedcount:
                 self._get_writer().add_reader(oldramindex.reader())
-                
+
             if self.writer:
                 self.writer.commit(**self.commitargs)
                 self.writer = None
                 self.commitcount += 1
-        
+
             if restart:
                 if self.period:
                     self.timer = threading.Timer(self.period, self.commit)
-    
+
     def add_reader(self, reader):
         with self._write_lock:
             self._get_writer().add_reader(reader)
-    
+
     def add_document(self, **fields):
         with self._sync_lock:
             self.ramindex.add_document(**fields)
             self.bufferedcount += 1
         if self.bufferedcount >= self.limit:
             self.commit()
-    
+
     @synchronized
     def update_document(self, **fields):
         self._get_writer()
         super(BufferedWriter, self).update_document(**fields)
-    
+
     @synchronized
     def delete_document(self, docnum, delete=True):
         if docnum < self.base:
             return self._get_writer().delete_document(docnum, delete=delete)
         else:
-            return self.ramindex.delete_document(docnum - self.base, delete=delete)
-        
+            return self.ramindex.delete_document(docnum - self.base,
+                                                 delete=delete)
+
     @synchronized
     def is_deleted(self, docnum):
         if docnum < self.base:
@@ -580,6 +618,3 @@ class BufferedWriter(IndexWriter):
 
 # Backwards compatibility with old name
 BatchWriter = BufferedWriter
-
-
-

@@ -30,7 +30,7 @@ This module contains common utility objects/functions for the other query
 parser modules.
 """
 
-import re
+from whoosh.compat import string_type
 
 
 class QueryParserError(Exception):
@@ -39,16 +39,21 @@ class QueryParserError(Exception):
         self.cause = cause
 
 
-def rcompile(pattern, flags=0):
-    if not isinstance(pattern, basestring):
-        # If it's not a string, assume it's already a compiled pattern
-        return pattern
-    return re.compile(pattern, re.UNICODE | flags)
-
-
 def get_single_text(field, text, **kwargs):
-    # Just take the first token
+    """Returns the first token from an analyzer's output.
+    """
+
     for t in field.process_text(text, mode="query", **kwargs):
         return t
 
 
+def attach(q, stxnode):
+    if q:
+        q.startchar = stxnode.startchar
+        q.endchar = stxnode.endchar
+    return q
+
+
+def print_debug(level, msg):
+    if level:
+        print("  " * (level - 1), msg)

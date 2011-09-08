@@ -17,11 +17,10 @@ To open an existing index::
     ix = DataStoreStorage().open_index()
 """
 
-from cStringIO import StringIO
+from google.appengine.api import memcache  #@UnresolvedImport
+from google.appengine.ext import db  #@UnresolvedImport
 
-from google.appengine.api import memcache
-from google.appengine.ext import db
-
+from whoosh.compat import BytesIO
 from whoosh.store import Storage
 from whoosh.filedb.fileindex import _create_index, FileIndex, _DEF_INDEX_NAME
 from whoosh.filedb.filestore import ReadOnlyError
@@ -29,15 +28,15 @@ from whoosh.filedb.structfile import StructFile
 
 
 class DatastoreFile(db.Model):
-    """A file-like object that is backed by a StringIO() object whose contents
+    """A file-like object that is backed by a BytesIO() object whose contents
     is loaded from a BlobProperty in the app engine datastore.
     """
-    
+
     value = db.BlobProperty()
 
     def __init__(self, *args, **kwargs):
         super(DatastoreFile, self).__init__(*args, **kwargs)
-        self.data = StringIO()
+        self.data = BytesIO()
 
     @classmethod
     def loadfile(cls, name):
@@ -47,7 +46,7 @@ class DatastoreFile(db.Model):
             memcache.set(name, file.value, namespace="DatastoreFile")
         else:
             file = cls(value=value)
-        file.data = StringIO(file.value)
+        file.data = BytesIO(file.value)
         return file
 
     def close(self):
@@ -55,7 +54,8 @@ class DatastoreFile(db.Model):
         self.value = self.getvalue()
         if oldvalue != self.value:
             self.put()
-            memcache.set(self.key().id_or_name(), self.value, namespace="DatastoreFile")
+            memcache.set(self.key().id_or_name(), self.value,
+                         namespace="DatastoreFile")
 
     def tell(self):
         return self.data.tell()
@@ -79,19 +79,19 @@ class DatastoreFile(db.Model):
 class MemcacheLock(object):
     def __init__(self, name):
         self.name = name
-        
+
     def acquire(self, blocking=False):
         val = memcache.add(self.name, "L", 360, namespace="whooshlocks")
-        
+
         if blocking and not val:
             # Simulate blocking by retrying the acquire over and over
             import time
             while not val:
                 time.sleep(0.1)
                 val = memcache.add(self.name, "", 360, namespace="whooshlocks")
-        
+
         return val
-    
+
     def release(self):
         memcache.delete(self.name, namespace="whooshlocks")
 
@@ -104,7 +104,7 @@ class DatastoreStorage(Storage):
     def create_index(self, schema, indexname=_DEF_INDEX_NAME):
         if self.readonly:
             raise ReadOnlyError
-        
+
         _create_index(self, schema, indexname)
         return FileIndex(self, schema, indexname)
 
@@ -151,6 +151,3 @@ class DatastoreStorage(Storage):
 
     def lock(self, name):
         return MemcacheLock(name)
-
-
-

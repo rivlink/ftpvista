@@ -25,7 +25,7 @@
 # those of the authors and should not be interpreted as representing official
 # policies, either expressed or implied, of Matt Chaput.
 
-__version__ = (1, 8, 3)
+__version__ = (2, 2, 2)
 
 
 def versionstring(build=True, extra=True):
@@ -36,15 +36,14 @@ def versionstring(build=True, extra=True):
         checked if build is True.
     :rtype: str
     """
-    
+
     if build:
         first = 3
     else:
         first = 2
-    
+
     s = ".".join(str(n) for n in __version__[:first])
     if build and extra:
         s += "".join(str(n) for n in __version__[3:])
-    
-    return s
 
+    return s
