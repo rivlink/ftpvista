@@ -119,7 +119,7 @@ class SearchFilterFileTypes:
             SearchFilterFileTypes.init()
         if filter_list is not None:
             for filter in SearchFilterFileTypes.aSearchFilterFileType:
-                if filter_list.count(filter.getValue()) == 1:
+                if filter_list.count(str(filter.getValue())) == 1:
                     filter.setSelected(True)
                 else:
                     filter.setSelected(False)

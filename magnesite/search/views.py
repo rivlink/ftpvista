@@ -59,7 +59,8 @@ def index(request):
                                              'servers' : servers,
                                              'sTrId': u'node-',
                                              'servers': models.get_servers(),
-                                             'aFilterFileTypes': SearchFilterFileTypes.getFileTypes(),
+                                             'aFilterFileTypes': SearchFilterFileTypes.getFileTypes([c.VIDEOS, c.AUDIOS, c.IMAGES, c.ARCHIVES, c.DISKIMAGES]),
+                                             'isOnlineSelected': True,
                                              'nb_files': models.get_nb_files(),
                                              'files_size': models.get_files_size()})
 
@@ -98,7 +99,7 @@ def search(request):
     else:
         # Default values
         query = ""
-        online_seulement = True
+        online_seulement = 1
         filter_list = [c.VIDEOS, c.AUDIOS, c.IMAGES, c.ARCHIVES, c.DISKIMAGES]
     
     return render_to_response('index.html', {'sPrefix' : c.sPrefix,
