@@ -106,14 +106,14 @@
 									<select id="ft" name="ft" multiple="multiple" size="5" >
 									{% for filterFileType in aFilterFileTypes %}
 										{% autoescape off %}
-										<option value="{{ filterFileType.getValue }}" selected="selected">{{ filterFileType.getText }}</option>
+										<option value="{{ filterFileType.getValue }}" {% if filterFileType.isSelected %}selected="selected"{% endif %}>{{ filterFileType.getText }}</option>
 										{% endautoescape %}
 									{% endfor %}
 									</select>
 								</li>
 								<li>
 									<!-- Online servers filter -->
-									<input id="os" name="os" checked="checked" type="checkbox" value="1" />
+									<input id="os" name="os" {% if isOnlineSelected %}checked="checked"{% endif %} type="checkbox" value="1" />
 									<label for="os">Serveurs online seulement</label>
 								</li>
 							</ul>

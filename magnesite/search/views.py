@@ -103,7 +103,8 @@ def search(request):
                                              'aFileNodes': filteredFileNodes,
                                              'sTrId': u'node-',
                                              'servers': models.get_servers(),
-                                             'aFilterFileTypes': SearchFilterFileTypes.getFileTypes(),
+                                             'aFilterFileTypes': SearchFilterFileTypes.getFileTypes(filter_list),
+                                             'isOnlineSelected': online_seulement,
                                              'nb_files': models.get_nb_files(),
                                              'files_size': models.get_files_size()})
 

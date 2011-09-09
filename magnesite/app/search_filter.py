@@ -23,6 +23,7 @@ class SearchFilterFileType:
         self.const = const
         self.sText = sText
         self.setExtensions(sExtensions)
+        self.selected = True
     
     def getText(self):
         return self.sText
@@ -35,6 +36,12 @@ class SearchFilterFileType:
     
     def getValue(self):
         return self.const
+    
+    def isSelected(self):
+        return self.selected
+    
+    def setSelected(self, select_state):
+        self.selected = select_state
     
     def setExtensions(self, sExtensions = None):
         if (sExtensions is None):
@@ -107,9 +114,15 @@ class SearchFilterFileTypes:
     """
     If not, initialize aSearchFilterFileType array, and then return it
     """
-    def getFileTypes(self):
+    def getFileTypes(self, filter_list=None):
         if (SearchFilterFileTypes.aSearchFilterFileType == None):
             SearchFilterFileTypes.init()
+        if filter_list is not None:
+            for filter in SearchFilterFileTypes.aSearchFilterFileType:
+                if filter_list.count(filter.getValue()) == 1:
+                    filter.setSelected(True)
+                else:
+                    filter.setSelected(False)
         return SearchFilterFileTypes.aSearchFilterFileType
     
     """
