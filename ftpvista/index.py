@@ -2,6 +2,7 @@
 
 import logging
 import os, os.path
+from time import time
 from datetime import datetime, timedelta
 from StringIO import StringIO
 from urllib import pathname2url
@@ -37,6 +38,7 @@ class Index (object):
         self._searcher = self._idx.searcher()
         #self._writer = AsyncWriter(self._idx, )
         self._writer = BufferedWriter(self._idx, 120, 4000)
+        self._last_optimization = None
 
     def get_schema(self):
         analyzer = StemmingAnalyzer('([a-zA-Z0-9])+')
@@ -137,7 +139,9 @@ class Index (object):
         """ Commit the changes in the index and optimize it """
         self.log.info(' -- Begin of Commit -- ')
         self._writer.commit()
-        self._idx.optimize()
+        if self._last_optimization is None or self._last_optimization + 3600 < time():
+            self._idx.optimize()
+            self._last_optimization = time()
         self.log.info('Index commited and optimized')
         
         self._searcher = self._idx.searcher()
