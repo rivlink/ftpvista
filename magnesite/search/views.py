@@ -96,7 +96,10 @@ def search(request):
         else:
             filteredFileNodes = list(fileNodes)
     else:
+        # Default values
         query = ""
+        online_seulement = True
+        filter_list = [c.VIDEOS, c.AUDIOS, c.IMAGES, c.ARCHIVES, c.DISKIMAGES]
     
     return render_to_response('index.html', {'sPrefix' : c.sPrefix,
                                              'query' : query,
