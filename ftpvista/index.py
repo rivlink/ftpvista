@@ -35,7 +35,8 @@ class Index (object):
             self._idx = index.open_dir(dir)
 
         self._searcher = self._idx.searcher()
-        self._writer = AsyncWriter(self._idx, )#Async(self._idx, 30, 1000)
+        #self._writer = AsyncWriter(self._idx, )
+        self._writer = BufferedWriter(self._idx, 120, 4000)
 
     def get_schema(self):
         analyzer = StemmingAnalyzer('([a-zA-Z0-9])+')
@@ -66,11 +67,9 @@ class Index (object):
         of files needing to be reindexed.
         """
 
-        def delete_doc(serverid, path):
-            writer = AsyncWriter(self._idx, )
+        def delete_doc(writer, serverid, path):
             writer.delete_by_query(Term('server_id', serverid) &
                                       Term('path', path))
-            writer.commit()
 
 
         # Build a {path => (size, mtime)} mapping for quick lookups
@@ -85,14 +84,14 @@ class Index (object):
 
                 if indexed_path not in to_index:
                     # This file was deleted from the server since it was indexed
-                    delete_doc(server_id, indexed_path)
+                    delete_doc(self._writer, server_id, indexed_path)
                     self.log.debug("%s has been removed" % indexed_path)
                 else:
                     size, mtime = to_index[indexed_path]
                     if mtime > datetime.strptime(fields['mtime'],
                                                  '%Y-%m-%d %H:%M:%S'):
                         # This file has been modified since it was indexed
-                        delete_doc(server_id, indexed_path)
+                        delete_doc(self._writer, server_id, indexed_path)
                     else:
                         # up to date, no need to reindex
                         del to_index[indexed_path]
@@ -135,19 +134,18 @@ class Index (object):
 
 
     def commit(self):
-        #self._writer = BatchWriter(self._idx, 30, 1000)
         """ Commit the changes in the index and optimize it """
         self.log.info(' -- Begin of Commit -- ')
         self._writer.commit()
         self._idx.optimize()
         self.log.info('Index commited and optimized')
         
-        self._writer = AsyncWriter(self._idx, )
         self._searcher = self._idx.searcher()
         self.log.info(' -- End of Commit -- ')
         
     def close(self):
-        self._writer.commit()
+        self.log.info(' -- Closing writer and index -- ')
+        self._writer.close()
         """ Close the index """
         self._idx.close()
 
