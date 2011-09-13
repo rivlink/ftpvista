@@ -130,11 +130,14 @@ def sigterm_handler(signum, frame):
 def close_daemon():
     global flock
     global context
+    global sniffer
     destroy_pid_file()
     if flock is not None:
         flock.release()
     if context is not None:
         context.close()
+    if sniffer is not None:
+        sniffer.stop()
     os._exit(os.EX_OK)
 
 def cleanup_and_close():
@@ -202,9 +205,6 @@ def main(options):
             log = logging.getLogger('ftpvista.main')
             log.error('Error in main : %r' % e)
             close_daemon()
-            global sniffer
-            if sniffer is not None:
-                sniffer.stop()
             raise
 
 if __name__ == '__main__':
