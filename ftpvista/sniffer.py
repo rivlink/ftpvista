@@ -2,7 +2,7 @@
 
 import re
 
-from    scapy.all import sniff, ARP
+from scapy.all import sniff, ARP
 
 import observer
 import pipeline
