@@ -2,7 +2,7 @@
 
 import re
 
-from scapy.all import sniff, ARP
+from    scapy.all import sniff, ARP
 
 import observer
 import pipeline
@@ -25,15 +25,10 @@ class ARPSniffer (observer.Observable):
     def run(self):
         """Run the sniffer"""
 
-        #FIXME: horrible hack here : make sure we have the version of scapy
-        #       with the patch to stop the sniffr
         try:
-            sniff(filter="arp", prn=self._arp_callback, store=0, stop_filter=self._stopper)
+            sniff(filter="arp", prn=self._arp_callback, store=False, stop_filter=self._stopper)
         except TypeError, e:
-            print "Ok! This error likely happened because you are using " \
-                  + "a version of scapy without this patch : " \
-                  + "http://trac.secdev.org/scapy/wiki/PatchSelectStopperTimeout"
-
+            print "Ok! This error likely happened because you are not using scapy version 2.2 or above"
             raise
 
 
