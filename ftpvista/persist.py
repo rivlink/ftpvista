@@ -20,7 +20,6 @@ import nmap_scanner
 
 def never_date():
     """Helper that returns a DateTime object pointing to Epoch.
-
     This value is used as 'Never'."""
     return datetime.fromtimestamp(0)
 
@@ -150,7 +149,7 @@ class FTPServer (object):
         return Servers.get_ip_with_name(self.ip)
 
     def is_online(self):
-        return (self.last_seen + timedelta(minutes=10)) >= datetime.now()
+        return (self.last_seen + timedelta(seconds=310)) >= datetime.now()
 
     def get_online_class(self):
         if self.is_online():
@@ -158,7 +157,7 @@ class FTPServer (object):
         return "offline"
 
 class FTPVistaPersist(object):
-    def __init__(self, db_uri, rivplayer_uri = None):
+    def __init__(self, db_uri, rivplayer_uri=None):
         self.log = logging.getLogger('ftpvista.persist')
         self.engine = create_engine(db_uri)
         self.meta = MetaData(self.engine)

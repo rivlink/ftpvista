@@ -24,7 +24,7 @@ def search(query, limit=1000):
     def is_online(server):
         if not is_online_cache.has_key(server):
             delta = datetime.today() - server.get_last_seen()
-            is_online_cache[server] = delta < timedelta(minutes=10)
+            is_online_cache[server] = delta < timedelta(seconds=310)
 
         return is_online_cache[server]
     
