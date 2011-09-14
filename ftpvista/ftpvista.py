@@ -213,13 +213,8 @@ if __name__ == '__main__':
     parser.add_option("-c", "--config", dest="config_file", metavar="FILE", default='/home/ftpvista/ftpvista3/ftpvista.conf', help="Path to the config file")
     parser.add_option("-d", "--daemon", action="store_true", dest="daemon", default=True, help="Run FTPVista as a Daemon")
     parser.add_option("--no-daemon", action="store_false", dest="daemon", help="Don't run FTPVista as a Daemon")
-    parser.add_option("-n", "--check-online", action="store_true", dest="check_online", default=True, help="Launch FTPVista with online server checking")
-    parser.add_option("--no-check-online", action="store_false", dest="check_online", help="Launch FTPVista without online server checking")
     parser.add_option("-o", "--only-check-online", action="store_true", dest="only_check_online", help="Launch only online server checking module")
     
     (options, args) = parser.parse_args()
-    
-    if options.only_check_online and not options.check_online:
-        parser.error("--only-check-online (-o) is active, --no-check-online ignored")
     
     main(options)
