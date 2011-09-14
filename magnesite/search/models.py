@@ -22,7 +22,7 @@ def search(query, limit=1000):
     index = whoosh_index.open_dir(settings.WHOOSH_IDX)
     is_online_cache = {}
     
-    logging.basicConfig(level=logging.DEBUG,
+    logging.basicConfig(level=logging.INFO,
                         format='%(asctime)s %(levelname)s:%(name)s:%(message)s',
                         filename=settings.LOG_PATH)
 
