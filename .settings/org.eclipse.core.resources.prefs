@@ -1,4 +1,4 @@
-#Tue Sep 13 10:44:06 CEST 2011
+#Wed Sep 14 15:49:02 CEST 2011
 eclipse.preferences.version=1
 encoding//ftpvista/ftpvista.py=utf-8
 encoding//ftpvista/index.py=utf-8
@@ -8,4 +8,5 @@ encoding//ftpvista/scanner.py=utf-8
 encoding//ftpvista/sniffer.py=utf-8
 encoding//magnesite/search/models.py=utf-8
 encoding//magnesite/search/views.py=utf-8
+encoding//magnesite/settings.py=utf-8
 encoding//magnesite/urls.py=utf-8

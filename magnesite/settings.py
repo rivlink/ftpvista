@@ -12,6 +12,8 @@ ADMINS = (
 WHOOSH_IDX = '/home/ftpvista/ftpvista_idx'
 PERSIST_DB = 'sqlite:////home/ftpvista/ftpvista.db'
 
+LOG_PATH = '/var/log/ftpvista_search.log'
+
 MANAGERS = ADMINS
 
 DATABASE_ENGINE = ''           # 'postgresql_psycopg2', 'postgresql', 'mysql', 'sqlite3' or 'oracle'.

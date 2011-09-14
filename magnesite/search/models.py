@@ -20,12 +20,24 @@ persist = FTPVistaPersist(settings.PERSIST_DB)
 def search(query, limit=1000):
     index = whoosh_index.open_dir(settings.WHOOSH_IDX)
     is_online_cache = {}
+    
+    logging.basicConfig(level=logging.DEBUG,
+                        format='%(asctime)s %(levelname)s:%(name)s:%(message)s',
+                        filename=settings.LOG_PATH)
 
+    log = logging.getLogger('ftpvista_search')
+    log.info('Search query : %s' % query)
+    
     def is_online(server):
         if not is_online_cache.has_key(server):
-            delta = datetime.today() - server.get_last_seen()
+            datetime_today = datetime.today()
+            delta = datetime_today - server.get_last_seen()
             is_online_cache[server] = delta < timedelta(seconds=310)
-
+            
+            log.debug("datetime.today() : %s" % datetime_today)
+            log.debug("server.get_last_seen() : %s" % server.get_last_seen())
+            log.debug("delta : %s" % delta)
+            
         return is_online_cache[server]
     
     searcher = index.searcher()
