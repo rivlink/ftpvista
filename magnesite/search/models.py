@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import sys
+import logging
 sys.path.append("/home/ftpvista/ftpvista3/ftpvista")
 from django.db import models
 from django.conf import settings
