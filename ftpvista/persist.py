@@ -15,7 +15,7 @@ import re
 import id3reader
 from urllib import url2pathname
 
-from utils import Servers
+from utils import Servers, to_unicode
 import nmap_scanner
 
 def never_date():
@@ -195,7 +195,7 @@ class FTPVistaPersist(object):
                 return default
             else:
                 return None
-        tag = unicode(tag).strip()
+        tag = to_unicode(tag).strip()
         if tag == '':
             return default
         if type == 'integer' and re.match('\d{1,32}', tag) is None:
@@ -221,7 +221,10 @@ class FTPVistaPersist(object):
             if id3v1_genre_id >=0 and id3v1_genre_id <= 147:
                 genre = id3reader._genres[id3v1_genre_id]
         
-        self.log.debug(u'Adding Music ! Name : ' + unicode(name) + u' - Path : ' + unicode(uripath) + u' - Artist : ' + unicode(artist) + u' - Genre : ' + unicode(genre) + u' - Album : ' + unicode(album))
+        try:
+            self.log.debug(u'Adding Music ! Name : ' + to_unicode(name) + u' - Path : ' + to_unicode(uripath) + u' - Artist : ' + to_unicode(artist) + u' - Genre : ' + to_unicode(genre) + u' - Album : ' + to_unicode(album))
+        except UnicodeDecodeError:
+            pass
         
         try:
             artist_id, = self.session_player.query(Artist.id).filter_by(name=artist).one()

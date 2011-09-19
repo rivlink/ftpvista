@@ -248,7 +248,7 @@ class FetchID3TagsStage (pipeline.Stage):
                 
                 # TODO: Il faut récupérer d'autres informations !
                 try:
-                    self._persist.add_track(id3_map['title'], unicode('ftp://%s%s' % (self._server_addr, pathname2url(path.encode('utf-8')))), id3_map['performer'], id3_map['genre'], id3_map['album'], year=id3_map['year'], trackno=id3_map['track'])
+                    self._persist.add_track(id3_map['title'], to_unicode('ftp://%s%s' % (self._server_addr, pathname2url(path.encode('utf-8')))), id3_map['performer'], id3_map['genre'], id3_map['album'], year=id3_map['year'], trackno=id3_map['track'])
                 except Exception as e:
                     self.log.error('Error while adding song to DB : %r' % e)
 
@@ -277,11 +277,11 @@ class WriteDataStage (pipeline.Stage):
         path = context.get_path()
         self.log.debug("Adding '%s' in the index" % path)
         self._index.add_document(
-                            server_id = unicode(self._server_id),
+                            server_id = to_unicode(self._server_id),
                             name = os.path.basename(path),
                             path = path,
-                            size = unicode(context.get_size()),
-                            mtime = unicode(context.get_mtime()),
+                            size = to_unicode(context.get_size()),
+                            mtime = to_unicode(context.get_mtime()),
                             audio_performer = get_extra('audio_performer'),
                             audio_title = get_extra('audio_title'),
                             audio_album = get_extra('audio_album'),
@@ -350,7 +350,7 @@ class IndexUpdateCoordinator(object):
         server.set_files_size(size)
 
         # filter out the files already indexed and up to date
-        files = self._index.incremental_server_update(unicode(server_id), files)
+        files = self._index.incremental_server_update(to_unicode(server_id), files)
 
         # sort the files by path, may reduce the CWDs if needed to fetch infos
         # from the FTP server and makes the potential errors append always in
