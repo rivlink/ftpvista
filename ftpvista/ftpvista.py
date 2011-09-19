@@ -110,7 +110,7 @@ def main_daemonized(config):
 
     # Full-text index for storing terms from the files found on the servers
     index_uri = config.get('index', 'uri')
-    index = Index(index_uri)
+    index = Index(index_uri, persist)
 
     # This defines how and at which period to perform updates from the servers
     min_update_interval = config.getint('indexer', 'min_update_interval')

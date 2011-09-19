@@ -24,7 +24,7 @@ from utils import to_unicode
 import nmap_scanner
 
 class Index (object):
-    def __init__(self, dir):
+    def __init__(self, dir, persist):
         self.log = logging.getLogger('ftpvista.index')
 
         if not os.path.exists(dir):
@@ -39,6 +39,7 @@ class Index (object):
         #self._writer = AsyncWriter(self._idx, )
         self._writer = BufferedWriter(self._idx, 120, 4000)
         self._last_optimization = None
+        self._persist = persist
 
     def get_schema(self):
         analyzer = StemmingAnalyzer('([a-zA-Z0-9])+')
@@ -88,6 +89,9 @@ class Index (object):
                     # This file was deleted from the server since it was indexed
                     delete_doc(self._writer, server_id, indexed_path)
                     self.log.debug("%s has been removed" % indexed_path)
+                    # Deleting musics from rivplayer database
+                    if indexed_path.lower().endswith('.mp3'):
+                        self._persist.del_track(indexed_path)
                 else:
                     size, mtime = to_index[indexed_path]
                     if mtime > datetime.strptime(fields['mtime'],
@@ -220,7 +224,7 @@ class FetchID3TagsStage (pipeline.Stage):
         path = context.get_path()
 
         # if the file has a candidate extension
-        if any(map(lambda x: path.endswith(x), self._extensions)):
+        if any(map(lambda x: path.lower().endswith(x), self._extensions)):
             self.log.debug('Trying to get ID3 data for %s' % path)
 
             # Fetch the data from the server
@@ -250,7 +254,7 @@ class FetchID3TagsStage (pipeline.Stage):
                 try:
                     self._persist.add_track(id3_map['title'], to_unicode('ftp://%s%s' % (self._server_addr, pathname2url(path.encode('utf-8')))), id3_map['performer'], id3_map['genre'], id3_map['album'], year=id3_map['year'], trackno=id3_map['track'])
                 except Exception as e:
-                    self.log.error('Error while adding song to DB : %r' % e)
+                    self.log.error(u'Error while adding song to DB : %r' % e)
 
         # Whatever the outcome of this stage,
         # continue the execution of the pipeline

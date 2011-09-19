@@ -255,6 +255,9 @@ class FTPVistaPersist(object):
         except NoResultFound, e:
             self.session_player.add(Track(name, uripath, genre_id, album_id, duration, year, bitrate, frequency, lyrics, trackno))
             self.session_player.commit()
+    
+    def del_track(self, uripath):
+        self.session_player.query(Track).filter_by(uripath=uripath).delete()
 
     def get_server_by_ip(self, ip_addr):
         server = self.session.query(FTPServer).filter_by(ip=ip_addr).first()
