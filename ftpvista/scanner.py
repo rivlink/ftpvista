@@ -107,13 +107,11 @@ class FTPScanner(object):
                 else:
                     try:
                         size = int(size)
+                        # TODO : splitting the string and then joining it sux balls
+                        date = self.parse_date(' '.join([date1, date2, date3]))
+                        files.append((to_unicode(full_path), size, date))
                     except ValueError:
                         return
-                    # FIXME : and what if the date is invalid ?
-                    # TODO : splitting the string and then joining it sux balls
-                    date = self.parse_date(' '.join([date1, date2, date3]))
-
-                    files.append((to_unicode(full_path), size, date))
             else:
                 self.log.warning('Path %s not indexed due '
                                  'to permission/type problems.' % full_path)

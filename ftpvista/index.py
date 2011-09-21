@@ -94,13 +94,16 @@ class Index (object):
                         self._persist.del_track(indexed_path)
                 else:
                     size, mtime = to_index[indexed_path]
-                    if mtime > datetime.strptime(fields['mtime'],
-                                                 '%Y-%m-%d %H:%M:%S'):
-                        # This file has been modified since it was indexed
+                    try:
+                        if mtime > datetime.strptime(fields['mtime'],
+                                                     '%Y-%m-%d %H:%M:%S'):
+                            # This file has been modified since it was indexed
+                            delete_doc(self._writer, server_id, indexed_path)
+                        else:
+                            # up to date, no need to reindex
+                            del to_index[indexed_path]
+                    except ValueError, e:
                         delete_doc(self._writer, server_id, indexed_path)
-                    else:
-                        # up to date, no need to reindex
-                        del to_index[indexed_path]
 
         # return the remaining files
         return [(path, size, mtime)
