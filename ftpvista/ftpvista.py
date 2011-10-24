@@ -60,7 +60,7 @@ def check_online(config):
     
     
     db_uri = config.get('db', 'uri')
-    persist = ftpvista_persist.FTPVistaPersist(db_uri, index=index)
+    persist = ftpvista_persist.FTPVistaPersist(db_uri)
     persist.initialize_store()
     
     index_uri = config.get('index', 'uri')
