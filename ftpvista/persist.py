@@ -315,7 +315,7 @@ class FTPVistaPersist(object):
         """ Delete server files from index """
         self.index.delete_all_docs(server)
         """ Delete server from DB """
-        server.delete()
+        self.session.query(FTPServer).filter_by(id=server.get_server_id()).delete()
         self.save()
 
     def save(self):

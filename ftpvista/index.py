@@ -63,7 +63,7 @@ class Index (object):
         writer = AsyncWriter(self._idx, )
         writer.delete_by_query(Term('server_id', to_unicode(server.get_server_id())))
         writer.commit()
-        self.log.info('All documents deleting from the index for server %s' % server.get_ip_addr())
+        self.log.info('All documents of server %s deleted' % server.get_ip_addr())
     
     def incremental_server_update(self, server_id, current_files):
         """Prepares to incrementaly update the documents for the given server.
