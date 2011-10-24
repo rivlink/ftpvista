@@ -61,7 +61,7 @@ class Index (object):
     
     def delete_all_docs(self, server):
         writer = AsyncWriter(self._idx, )
-        writer.delete_by_query(Term('server_id', to_unicode(server.get_server_id())))
+        writer.delete_by_term('server_id', to_unicode(server.get_server_id()))
         writer.commit()
         self.log.info('All documents of server %s deleted' % server.get_ip_addr())
     
