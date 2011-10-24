@@ -57,8 +57,6 @@ def check_online(config):
     log = logging.getLogger('ftpvista')
     log.info('Starting online servers checker')
     
-    
-    
     db_uri = config.get('db', 'uri')
     persist = ftpvista_persist.FTPVistaPersist(db_uri)
     persist.initialize_store()
@@ -67,7 +65,10 @@ def check_online(config):
     index = Index(index_uri, persist)
     persist.set_index(index)
     
-    persist.launch_online_checker()
+    update_interval = int(config.get('online_checker', 'update_interval'))
+    purge_interval = int(config.get('online_checker', 'purge_interval'))
+    
+    persist.launch_online_checker(update_interval, purge_interval)
 
 def main_daemonized(config):
     
