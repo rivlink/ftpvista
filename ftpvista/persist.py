@@ -157,11 +157,10 @@ class FTPServer (object):
         return "offline"
 
 class FTPVistaPersist(object):
-    def __init__(self, db_uri, rivplayer_uri=None, index=None):
+    def __init__(self, db_uri, rivplayer_uri=None):
         self.log = logging.getLogger('ftpvista.persist')
         self.engine = create_engine(db_uri)
         self.meta = MetaData(self.engine)
-        self.index = index
         if rivplayer_uri is not None:
             self.engine_player = create_engine(rivplayer_uri)
         else:
@@ -182,6 +181,9 @@ class FTPVistaPersist(object):
             mapper(FTPServer, self.servers)
         except ArgumentError:
             pass
+    
+    def set_index(self, index):
+        self.index = index
 
     def initialize_store(self):
         self.meta.create_all()
