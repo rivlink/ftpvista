@@ -13,7 +13,7 @@ from whoosh import index
 from whoosh.fields import Schema, ID, IDLIST, KEYWORD, TEXT
 from whoosh.analysis import StandardAnalyzer
 from whoosh.query import Term
-from whoosh.writing import BufferedWriter
+from whoosh.writing import BufferedWriter, AsyncWriter
 from whoosh.analysis import CharsetFilter, StemmingAnalyzer
 from whoosh.support.charset import accent_map
 
@@ -58,7 +58,13 @@ class Index (object):
                       audio_track=ID(stored=True),
                       audio_year=ID(stored=True)
                       )
-
+    
+    def delete_all_docs(self, server):
+        writer = AsyncWriter(self._idx, )
+        writer.delete_by_query(Term('server_id', server.get_server_id()))
+        writer.commit()
+        self.log.info('All documents deleting from the index for server %s' % server.get_ip_addr())
+    
     def incremental_server_update(self, server_id, current_files):
         """Prepares to incrementaly update the documents for the given server.
 

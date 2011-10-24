@@ -57,8 +57,11 @@ def check_online(config):
     log = logging.getLogger('ftpvista')
     log.info('Starting online servers checker')
     
+    index_uri = config.get('index', 'uri')
+    index = Index(index_uri, persist)
+    
     db_uri = config.get('db', 'uri')
-    persist = ftpvista_persist.FTPVistaPersist(db_uri)
+    persist = ftpvista_persist.FTPVistaPersist(db_uri, index=index)
     persist.initialize_store()
     
     persist.launch_online_checker()

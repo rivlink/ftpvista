@@ -157,10 +157,11 @@ class FTPServer (object):
         return "offline"
 
 class FTPVistaPersist(object):
-    def __init__(self, db_uri, rivplayer_uri=None):
+    def __init__(self, db_uri, rivplayer_uri=None, index=None):
         self.log = logging.getLogger('ftpvista.persist')
         self.engine = create_engine(db_uri)
         self.meta = MetaData(self.engine)
+        self.index = index
         if rivplayer_uri is not None:
             self.engine_player = create_engine(rivplayer_uri)
         else:
@@ -168,9 +169,12 @@ class FTPVistaPersist(object):
 
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
-
-        Session_player = sessionmaker(bind=self.engine_player)
-        self.session_player = Session_player()
+        
+        if rivplayer_uri is not None:
+            Session_player = sessionmaker(bind=self.engine_player)
+            self.session_player = Session_player()
+        else:
+            self.session_player = None
 
         self.servers = build_tables(self.meta)
 
@@ -258,7 +262,7 @@ class FTPVistaPersist(object):
     
     def del_track(self, uripath):
         self.session_player.query(Track).filter_by(uripath=uripath).delete()
-        self.session_player.commit();
+        self.session_player.commit()
 
     def get_server_by_ip(self, ip_addr):
         server = self.session.query(FTPServer).filter_by(ip=ip_addr).first()
@@ -277,24 +281,40 @@ class FTPVistaPersist(object):
     def get_servers(self):
         return self.session.query(FTPServer).all()
 
-    def launch_online_checker(self, interval=300):
-        """Launch a check every 'interval' (in seconds) to verify if servers in database are online"""
+    def launch_online_checker(self, interval=300, purgeinterval=30):
+        """ Launch a check every 'interval' (in seconds) to verify if servers in database are online.
+            If a server have not been seen since 'purgeinterval' days, it is deleted from the index and the database.
+        """
         self.log = logging.getLogger('ftpvista.nmaps')
         self._scanner = nmap_scanner.FTPFilter()
-
         while True:
-            self.check()
+            self.check(purgeinterval)
             time.sleep(int(interval))
 
-    def check(self):
+    def check(self, purgeinterval=None):
         servers = self.get_servers()
+        if purgeinterval is not None:
+            deltapurgeinterval = timedelta(days=int(purgeinterval))
         for server in servers:
             if self._scanner.is_ftp_open(server.get_ip_addr()):
                 last_seen = server.last_seen
                 server.update_last_seen()
                 self.log.info('Server %s is online. Last seen value was %s' % (server.get_ip_addr(), last_seen))
+            elif purgeinterval is not None and (server.get_last_seen() + deltapurgeinterval) < datetime.now():
+                self.delete_server(server)
         self.save()
         self.log.info('Online information saved !')
+
+    def delete_server(self, server):
+        if self.session_player is not None:
+            """Delete tracks from player DB """
+            self.session_player.query(Track).filter(Track.uripath.startswith('ftp://%s' % server.get_ip_addr())).delete()
+            self.session_player.commit()
+        """ Delete server files from index """
+        self.index.delete_all_docs(server)
+        """ Delete server from DB """
+        server.delete()
+        self.save()
 
     def save(self):
         self.session.commit()
