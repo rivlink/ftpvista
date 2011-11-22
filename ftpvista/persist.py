@@ -265,6 +265,13 @@ class FTPVistaPersist(object):
     def del_track(self, uripath):
         self.session_player.query(Track).filter_by(uripath=uripath).delete()
         self.session_player.commit()
+    
+    def truncate_all(self):
+        self.session_player.query(Track).delete()
+        self.session_player.query(Album).delete()
+        self.session_player.query(Genre).delete()
+        self.session_player.query(Artist).delete()
+        self.session_player.commit()
 
     def get_server_by_ip(self, ip_addr):
         server = self.session.query(FTPServer).filter_by(ip=ip_addr).first()

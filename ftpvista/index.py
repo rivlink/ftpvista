@@ -26,8 +26,12 @@ import nmap_scanner
 class Index (object):
     def __init__(self, dir, persist):
         self.log = logging.getLogger('ftpvista.index')
-
+        
+        self._persist = persist
         if not os.path.exists(dir):
+            # (Re)creating the index, so if the music database is not empty, it must be emptied
+            self.log.info('Emptying music database')
+            self._persist.truncate_all()
             self.log.info('Creating the index in %s' % dir)
             os.mkdir(dir)
             self._idx = index.create_in(dir, schema=self.get_schema())
@@ -39,7 +43,6 @@ class Index (object):
         #self._writer = AsyncWriter(self._idx, )
         self._writer = BufferedWriter(self._idx, 120, 4000)
         self._last_optimization = None
-        self._persist = persist
 
     def get_schema(self):
         analyzer = StemmingAnalyzer('([a-zA-Z0-9])+')
@@ -60,7 +63,7 @@ class Index (object):
                       )
     
     def delete_all_docs(self, server):
-        writer = AsyncWriter(self._idx, )
+        writer = AsyncWriter(self._idx,)
         writer.delete_by_term('server_id', to_unicode(server.get_server_id()))
         writer.commit()
         self.log.info('All documents of server %s deleted' % server.get_ip_addr())
@@ -77,7 +80,7 @@ class Index (object):
         """
 
         def delete_doc(writer, serverid, path):
-            writer.delete_by_query(Term('server_id', serverid) &
+            writer.delete_by_query(Term('server_id', serverid) & 
                                       Term('path', path))
 
 
@@ -116,8 +119,8 @@ class Index (object):
                 for (path, (size, mtime)) in to_index.iteritems()]
 
     def add_document(self, server_id, name, path, size, mtime,
-                     audio_album = None, audio_performer = None,
-                     audio_title = None, audio_year = None):
+                     audio_album=None, audio_performer=None,
+                     audio_title=None, audio_year=None):
         """Add a document with the specified fields in the index.
 
         Changes need to be commited.
@@ -210,7 +213,7 @@ class FetchID3TagsStage (pipeline.Stage):
         self._buffer = StringIO()
         self._curl = pycurl.Curl()
         self._curl.setopt(pycurl.WRITEFUNCTION, self._data_callback)
-        self._curl.setopt(pycurl.RANGE, '0-%d' % (fetch_size-1))
+        self._curl.setopt(pycurl.RANGE, '0-%d' % (fetch_size - 1))
 
     def _data_callback(self, data):
         self._buffer.write(data)
@@ -290,15 +293,15 @@ class WriteDataStage (pipeline.Stage):
         path = context.get_path()
         self.log.debug("Adding '%s' in the index" % path)
         self._index.add_document(
-                            server_id = to_unicode(self._server_id),
-                            name = os.path.basename(path),
-                            path = path,
-                            size = to_unicode(context.get_size()),
-                            mtime = to_unicode(context.get_mtime()),
-                            audio_performer = get_extra('audio_performer'),
-                            audio_title = get_extra('audio_title'),
-                            audio_album = get_extra('audio_album'),
-                            audio_year = get_extra('audio_year'))
+                            server_id=to_unicode(self._server_id),
+                            name=os.path.basename(path),
+                            path=path,
+                            size=to_unicode(context.get_size()),
+                            mtime=to_unicode(context.get_mtime()),
+                            audio_performer=get_extra('audio_performer'),
+                            audio_title=get_extra('audio_title'),
+                            audio_album=get_extra('audio_album'),
+                            audio_year=get_extra('audio_year'))
 
         return True
 
@@ -355,7 +358,7 @@ class IndexUpdateCoordinator(object):
         # compute the size of all the files found
         size = reduce(lambda total_size, file: total_size + file[1], files, 0)
         self.log.info('Found %d files (%d G) on %s' % (len(files),
-                                                       size/(1024**3) ,
+                                                       size / (1073741824) , # 1073741824 = 1024 ** 3
                                                        server_addr))
 
         # Set new informatons about this server in the DB
