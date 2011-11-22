@@ -16,7 +16,7 @@
 				{% autoescape off %}
 					<tr id="{{ sTrId }}{{ forloop.counter }}" class="child-of-{{ sTrId }}{{ forloop.counter }}">
 						<td><span class="{{ fileNode.getSpanClass }}"><a href="{{ fileNode.getEscapedURL }}">{{ fileNode.getSpan }}</a></span></td>
-						<td><a href="{{ fileNode.getFolderrURL }}">{{ fileNode.getServer }}</a></td>
+						<td><a href="{{ fileNode.getFolderURL }}">{{ fileNode.getServer }}</a></td>
 						<td>{{ fileNode.getSize|filesizeformat }}</td>
 						<td>{{ fileNode.getDate }}</td>
 					</tr>
