@@ -1,6 +1,7 @@
 import const as c
 from search_filter import SearchFilterFileTypes
 from utils import Servers
+from os import path
 
 class FileNode:
     """
@@ -43,6 +44,9 @@ class FileNode:
     
     def getEscapedURL(self):
         return self.sURL.replace("&", "&amp;")
+    
+    def getFolderURL(self):
+        return path.dirname(self.sURL)
     
     def getServerURL(self):
         return "ftp://" + self.sFTP
