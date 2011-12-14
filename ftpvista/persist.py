@@ -10,6 +10,7 @@ from sqlalchemy.orm import mapper, sessionmaker, relationship, backref
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.exc import ArgumentError
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.dialects.mysql import TEXT
 from os import path
 import re
 import id3reader
@@ -75,7 +76,7 @@ class Track(Base):
     __table_args__ = {'mysql_engine':'InnoDB'}
     
     id = Column(Integer, primary_key=True)
-    uripath = Column(String(254), nullable=False)
+    uripath = Column(TEXT, nullable=False)
     genre_id = Column(Integer, ForeignKey("genre.id"))
     album_id = Column(Integer, ForeignKey("album.id"))
     name = Column(String(254), nullable=False)
