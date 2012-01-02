@@ -211,68 +211,71 @@ class FTPVistaPersist(object):
         
     
     def add_track(self, name, uripath, artist, genre, album, duration=0, year=0, bitrate='', frequency='', lyrics='', trackno=''):
-        name = self._clean_tag(name, default=url2pathname(path.basename(uripath).rsplit('.', 1)[0]))
-        artist = self._clean_tag(artist)
-        genre = self._clean_tag(genre)
-        album = self._clean_tag(album)
-        duration = self._clean_tag(duration, type='integer')
-        year = self._clean_tag(year, type='integer', max_len=4)
-        bitrate = self._clean_tag(bitrate, allow_none=True)
-        frequency = self._clean_tag(frequency, allow_none=True)
-        lyrics = self._clean_tag(lyrics, allow_none=True, max_len=4096)
-        trackno = self._clean_tag(trackno, type='integer')
-        
-        match = re.match('\((\d{1,3})\)', genre)
-        if match is not None:
-            id3v1_genre_id = int(match.group(1))
-            if id3v1_genre_id >=0 and id3v1_genre_id <= 147:
-                genre = id3reader._genres[id3v1_genre_id]
-        
-        try:
-            self.log.debug(u'Adding Music ! Name : ' + to_unicode(name) + u' - Path : ' + to_unicode(uripath) + u' - Artist : ' + to_unicode(artist) + u' - Genre : ' + to_unicode(genre) + u' - Album : ' + to_unicode(album))
-        except UnicodeDecodeError:
-            pass
-        
-        try:
-            artist_id, = self.session_player.query(Artist.id).filter_by(name=artist).one()
-        except NoResultFound, e:
-            new_artist = Artist(artist)
-            self.session_player.add(new_artist)
-            self.session_player.commit()
-            artist_id = new_artist.id
-
-        try:
-            album_id, = self.session_player.query(Album.id).filter_by(name=album).filter_by(artist_id=artist_id).one()
-        except NoResultFound, e:
-            new_album = Album(album, artist_id)
-            self.session_player.add(new_album)
-            self.session_player.commit()
-            album_id = new_album.id
-
-        try:
-            genre_id, = self.session_player.query(Genre.id).filter(Genre.name==genre).one()
-        except NoResultFound, e:
-            new_genre = Genre(genre)
-            self.session_player.add(new_genre)
-            self.session_player.commit()
-            genre_id = new_genre.id
+        if self.session_player is not None:
+            name = self._clean_tag(name, default=url2pathname(path.basename(uripath).rsplit('.', 1)[0]))
+            artist = self._clean_tag(artist)
+            genre = self._clean_tag(genre)
+            album = self._clean_tag(album)
+            duration = self._clean_tag(duration, type='integer')
+            year = self._clean_tag(year, type='integer', max_len=4)
+            bitrate = self._clean_tag(bitrate, allow_none=True)
+            frequency = self._clean_tag(frequency, allow_none=True)
+            lyrics = self._clean_tag(lyrics, allow_none=True, max_len=4096)
+            trackno = self._clean_tag(trackno, type='integer')
             
-        try:
-            track_id, = self.session_player.query(Track.id).filter(Track.uripath==uripath).one()
-        except NoResultFound, e:
-            self.session_player.add(Track(name, uripath, genre_id, album_id, duration, year, bitrate, frequency, lyrics, trackno))
-            self.session_player.commit()
+            match = re.match('\((\d{1,3})\)', genre)
+            if match is not None:
+                id3v1_genre_id = int(match.group(1))
+                if id3v1_genre_id >=0 and id3v1_genre_id <= 147:
+                    genre = id3reader._genres[id3v1_genre_id]
+            
+            try:
+                self.log.debug(u'Adding Music ! Name : ' + to_unicode(name) + u' - Path : ' + to_unicode(uripath) + u' - Artist : ' + to_unicode(artist) + u' - Genre : ' + to_unicode(genre) + u' - Album : ' + to_unicode(album))
+            except UnicodeDecodeError:
+                pass
+            
+            try:
+                artist_id, = self.session_player.query(Artist.id).filter_by(name=artist).one()
+            except NoResultFound, e:
+                new_artist = Artist(artist)
+                self.session_player.add(new_artist)
+                self.session_player.commit()
+                artist_id = new_artist.id
+    
+            try:
+                album_id, = self.session_player.query(Album.id).filter_by(name=album).filter_by(artist_id=artist_id).one()
+            except NoResultFound, e:
+                new_album = Album(album, artist_id)
+                self.session_player.add(new_album)
+                self.session_player.commit()
+                album_id = new_album.id
+    
+            try:
+                genre_id, = self.session_player.query(Genre.id).filter(Genre.name==genre).one()
+            except NoResultFound, e:
+                new_genre = Genre(genre)
+                self.session_player.add(new_genre)
+                self.session_player.commit()
+                genre_id = new_genre.id
+                
+            try:
+                track_id, = self.session_player.query(Track.id).filter(Track.uripath==uripath).one()
+            except NoResultFound, e:
+                self.session_player.add(Track(name, uripath, genre_id, album_id, duration, year, bitrate, frequency, lyrics, trackno))
+                self.session_player.commit()
     
     def del_track(self, uripath):
-        self.session_player.query(Track).filter_by(uripath=uripath).delete()
-        self.session_player.commit()
+        if self.session_player is not None:
+            self.session_player.query(Track).filter_by(uripath=uripath).delete()
+            self.session_player.commit()
     
     def truncate_all(self):
-        self.session_player.query(Track).delete()
-        self.session_player.query(Album).delete()
-        self.session_player.query(Genre).delete()
-        self.session_player.query(Artist).delete()
-        self.session_player.commit()
+        if self.session_player is not None:
+            self.session_player.query(Track).delete()
+            self.session_player.query(Album).delete()
+            self.session_player.query(Genre).delete()
+            self.session_player.query(Artist).delete()
+            self.session_player.commit()
 
     def get_server_by_ip(self, ip_addr):
         server = self.session.query(FTPServer).filter_by(ip=ip_addr).first()
