@@ -40,8 +40,8 @@ class Index (object):
             self._idx = index.open_dir(dir)
 
         self._searcher = self._idx.searcher()
-        #self._writer = AsyncWriter(self._idx, )
-        self._writer = BufferedWriter(self._idx, 120, 4000)
+        self._writer = AsyncWriter(self._idx, delay=5)
+        # self._writer = BufferedWriter(self._idx, 120, 4000)
         self._last_optimization = None
 
     def get_schema(self):
@@ -79,9 +79,12 @@ class Index (object):
         of files needing to be reindexed.
         """
 
-        def delete_doc(writer, serverid, path):
+        def delete_doc(writer, serverid, path, persist):
             writer.delete_by_query(Term('server_id', serverid) & 
                                       Term('path', path))
+            # Deleting musics from rivplayer database
+            if path.lower().endswith('.mp3'):
+                persist.del_track(path)
 
 
         # Build a {path => (size, mtime)} mapping for quick lookups
@@ -96,23 +99,20 @@ class Index (object):
 
                 if indexed_path not in to_index:
                     # This file was deleted from the server since it was indexed
-                    delete_doc(self._writer, server_id, indexed_path)
+                    delete_doc(self._writer, server_id, indexed_path, self._persist)
                     self.log.debug("%s has been removed" % indexed_path)
-                    # Deleting musics from rivplayer database
-                    if indexed_path.lower().endswith('.mp3'):
-                        self._persist.del_track(indexed_path)
                 else:
                     size, mtime = to_index[indexed_path]
                     try:
                         if mtime > datetime.strptime(fields['mtime'],
                                                      '%Y-%m-%d %H:%M:%S'):
                             # This file has been modified since it was indexed
-                            delete_doc(self._writer, server_id, indexed_path)
+                            delete_doc(self._writer, server_id, indexed_path, self._persist)
                         else:
                             # up to date, no need to reindex
                             del to_index[indexed_path]
                     except ValueError, e:
-                        delete_doc(self._writer, server_id, indexed_path)
+                        delete_doc(self._writer, server_id, indexed_path, self._persist)
 
         # return the remaining files
         return [(path, size, mtime)
