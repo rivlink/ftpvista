@@ -13,7 +13,7 @@ from whoosh import index
 from whoosh.fields import Schema, ID, IDLIST, KEYWORD, TEXT
 from whoosh.analysis import StandardAnalyzer
 from whoosh.query import Term
-from whoosh.writing import BufferedWriter, AsyncWriter
+from whoosh.writing import BufferedWriter
 from whoosh.analysis import CharsetFilter, StemmingAnalyzer
 from whoosh.support.charset import accent_map
 
@@ -40,8 +40,7 @@ class Index (object):
             self._idx = index.open_dir(dir)
 
         self._searcher = self._idx.searcher()
-        self._writer = AsyncWriter(self._idx, delay=5)
-        # self._writer = BufferedWriter(self._idx, 120, 4000)
+        self._writer = BufferedWriter(self._idx, 120, 4000)
         self._last_optimization = None
 
     def get_schema(self):
