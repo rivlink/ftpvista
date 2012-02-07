@@ -241,6 +241,9 @@ class FTPVistaPersist(object):
                 self.session_player.add(new_artist)
                 self.session_player.commit()
                 artist_id = new_artist.id
+            except:
+                self.session_player.rollback()
+                return
     
             try:
                 album_id, = self.session_player.query(Album.id).filter_by(name=album).filter_by(artist_id=artist_id).one()
@@ -249,6 +252,9 @@ class FTPVistaPersist(object):
                 self.session_player.add(new_album)
                 self.session_player.commit()
                 album_id = new_album.id
+            except:
+                self.session_player.rollback()
+                return
     
             try:
                 genre_id, = self.session_player.query(Genre.id).filter(Genre.name==genre).one()
@@ -257,25 +263,37 @@ class FTPVistaPersist(object):
                 self.session_player.add(new_genre)
                 self.session_player.commit()
                 genre_id = new_genre.id
+            except:
+                self.session_player.rollback()
+                return
                 
             try:
                 track_id, = self.session_player.query(Track.id).filter(Track.uripath==uripath).one()
             except NoResultFound, e:
                 self.session_player.add(Track(name, uripath, genre_id, album_id, duration, year, bitrate, frequency, lyrics, trackno))
                 self.session_player.commit()
+            except:
+                self.session_player.rollback()
+                return
     
     def del_track(self, uripath):
         if self.session_player is not None:
-            self.session_player.query(Track).filter_by(uripath=uripath).delete()
-            self.session_player.commit()
+            try:
+                self.session_player.query(Track).filter_by(uripath=uripath).delete()
+                self.session_player.commit()
+            except:
+                self.session_player.rollback()
     
     def truncate_all(self):
         if self.session_player is not None:
-            self.session_player.query(Track).delete()
-            self.session_player.query(Album).delete()
-            self.session_player.query(Genre).delete()
-            self.session_player.query(Artist).delete()
-            self.session_player.commit()
+            try:
+                self.session_player.query(Track).delete()
+                self.session_player.query(Album).delete()
+                self.session_player.query(Genre).delete()
+                self.session_player.query(Artist).delete()
+                self.session_player.commit()
+            except:
+                self.session_player.rollback()
 
     def get_server_by_ip(self, ip_addr):
         server = self.session.query(FTPServer).filter_by(ip=ip_addr).first()
@@ -320,9 +338,12 @@ class FTPVistaPersist(object):
 
     def delete_server(self, server):
         if self.session_player is not None:
-            """Delete tracks from player DB """
-            self.session_player.query(Track).filter(Track.uripath.startswith('ftp://%s' % server.get_ip_addr())).delete()
-            self.session_player.commit()
+            try:
+                """Delete tracks from player DB """
+                self.session_player.query(Track).filter(Track.uripath.startswith('ftp://%s' % server.get_ip_addr())).delete()
+                self.session_player.commit()
+            except:
+                self.session_player.rollback()
         """ Delete server files from index """
         self.index.delete_all_docs(server)
         """ Delete server from DB """
