@@ -71,7 +71,7 @@ def clean_all(config):
     # Clean music database
     persist.truncate_all()
     # Delete SQLite database
-    os.remove(db_uri.lstrip('sqlite://'))
+    os.remove("/" + db_uri.lstrip('sqlite://'))
     # Erase index folder
     shutil.rmtree(index_uri)
 
