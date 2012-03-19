@@ -214,7 +214,7 @@ def main(options):
                 format='%(asctime)s %(levelname)s:%(name)s:%(message)s',
                 filename=config.get('logs', 'main'))
             log = logging.getLogger('ftpvista.main')
-            log.error('Error in main : %r', traceback.format_stack())
+            log.error('Error in main : %s', traceback.format_exc())
             close_daemon()
             raise
 
