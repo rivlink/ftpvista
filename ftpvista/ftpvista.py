@@ -14,6 +14,7 @@ import daemon
 import lockfile
 import signal
 import sys
+import traceback
 
 os.environ['TZ'] = 'CET'
 
@@ -213,7 +214,7 @@ def main(options):
                 format='%(asctime)s %(levelname)s:%(name)s:%(message)s',
                 filename=config.get('logs', 'main'))
             log = logging.getLogger('ftpvista.main')
-            log.error('Error in main : %r' % e)
+            log.error('Error in main : %r', traceback.extract_stack())
             close_daemon()
             raise
 
