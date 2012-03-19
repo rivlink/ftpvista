@@ -15,6 +15,7 @@ import lockfile
 import signal
 import sys
 import traceback
+import shutil
 
 os.environ['TZ'] = 'CET'
 
@@ -50,6 +51,29 @@ def sniffer_task(queue, blacklist, valid_ip_pattern):
     
     # Run sniffer, run ..
     sniffer.run()
+
+def clean_all(config):
+    logging.basicConfig(level=logging.DEBUG,
+                        format='%(asctime)s %(levelname)s:%(name)s:%(message)s',
+                        filename=config.get('logs', 'main'))
+    log = logging.getLogger('ftpvista')
+    log.info('Starting FTPVista cleaning')
+    
+    db_uri = config.get('db', 'uri')
+    rivplayer_uri = config.get('db', 'rivplayer_uri')
+    if rivplayer_uri == 'None':
+        rivplayer_uri = None
+    persist = ftpvista_persist.FTPVistaPersist(db_uri, rivplayer_uri)
+    persist.initialize_store()
+    
+    index_uri = config.get('index', 'uri')
+    
+    # Clean music database
+    persist.truncate_all()
+    # Delete SQLite database
+    os.remove()
+    # Erase index folder
+    shutil.rmtree(index_uri.lstrip('sqlite://'))
 
 def check_online(config):
     logging.basicConfig(level=logging.DEBUG,
@@ -172,6 +196,14 @@ def main(options):
     config = ConfigParser.SafeConfigParser()
     config.read(options.config_file)
     
+    if options.clean_all:
+        s = raw_input('Do you really want to clean ftpvista files (make sure there is no running instances of FTPVista) ? [Y/N] : ')
+        if s.upper() == 'Y':
+            clean_all(config)
+            return 0
+        else:
+            return 0
+    
     """Daemonize FTPVista"""
     if options.daemon:
         #Context
@@ -225,6 +257,7 @@ if __name__ == '__main__':
     parser.add_option("-d", "--daemon", action="store_true", dest="daemon", default=True, help="Run FTPVista as a Daemon")
     parser.add_option("--no-daemon", action="store_false", dest="daemon", help="Don't run FTPVista as a Daemon")
     parser.add_option("-o", "--only-check-online", action="store_true", dest="only_check_online", help="Launch only online server checking module")
+    parser.add_option("--clean-all", action="store_true", dest="clean_all", help="Empty the index, the online database and the music database")
     
     (options, args) = parser.parse_args()
     
