@@ -71,9 +71,9 @@ def clean_all(config):
     # Clean music database
     persist.truncate_all()
     # Delete SQLite database
-    os.remove()
+    os.remove(db_uri.lstrip('sqlite://'))
     # Erase index folder
-    shutil.rmtree(index_uri.lstrip('sqlite://'))
+    shutil.rmtree(index_uri)
 
 def check_online(config):
     logging.basicConfig(level=logging.DEBUG,
