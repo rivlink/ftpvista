@@ -12,7 +12,7 @@ ADMINS = (
 WHOOSH_IDX = '/home/ftpvista/ftpvista_idx'
 PERSIST_DB = 'sqlite:////home/ftpvista/ftpvista.db'
 
-LOG_PATH = '/var/log/ftpvista_search.log'
+LOG_PATH = '/var/log/ftpvista/search.log'
 
 MANAGERS = ADMINS
 
