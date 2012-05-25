@@ -34,51 +34,16 @@ import re
 import sys
 import time
 from array import array
-from bisect import insort, bisect_left
+from bisect import insort, bisect_left, bisect_right
 from copy import copy
 from functools import wraps
 from struct import pack, unpack
 from threading import Lock
 
 from whoosh.compat import xrange, u, b, string_type
-from whoosh.system import IS_LITTLE
-
-
-try:
-    from itertools import permutations  #@UnusedImport
-except ImportError:
-    # This function was only added to itertools in 2.6...
-    def permutations(iterable, r=None):
-        pool = tuple(iterable)
-        n = len(pool)
-        r = n if r is None else r
-        if r > n:
-            return
-        indices = range(n)
-        cycles = range(n, n - r, -1)
-        yield tuple(pool[i] for i in indices[:r])
-        while n:
-            for i in reversed(range(r)):
-                cycles[i] -= 1
-                if cycles[i] == 0:
-                    indices[i:] = indices[i + 1:] + indices[i:i + 1]
-                    cycles[i] = n - i
-                else:
-                    j = cycles[i]
-                    indices[i], indices[-j] = indices[-j], indices[i]
-                    yield tuple(pool[i] for i in indices[:r])
-                    break
-            else:
-                return
-
-
-try:
-    from operator import methodcaller  #@UnusedImport
-except ImportError:
-    def methodcaller(name, *args, **kwargs):
-        def caller(obj):
-            return getattr(obj, name)(*args, **kwargs)
-        return caller
+from whoosh.compat import array_tobytes
+from whoosh.system import pack_ushort_le, pack_uint_le
+from whoosh.system import unpack_ushort_le, unpack_uint_le
 
 
 if sys.platform == 'win32':
@@ -90,26 +55,16 @@ else:
 # Note: these functions return a tuple of (text, length), so when you call
 # them, you have to add [0] on the end, e.g. str = utf8encode(unicode)[0]
 
-utf8encode = codecs.getencoder("utf_8")
-utf8decode = codecs.getdecoder("utf_8")
+utf8encode = codecs.getencoder("utf-8")
+utf8decode = codecs.getdecoder("utf-8")
+
+#utf16encode = codecs.getencoder("utf-16-be")
+#utf16decode = codecs.getdecoder("utf-16-be")
+#utf32encode = codecs.getencoder("utf-32-be")
+#utf32decode = codecs.getdecoder("utf-32-be")
 
 
 # Functions
-
-def array_to_string(a):
-    if IS_LITTLE:
-        a = copy(a)
-        a.byteswap()
-    return a.tostring()
-
-
-def string_to_array(typecode, s):
-    a = array(typecode)
-    a.fromstring(s)
-    if IS_LITTLE:
-        a.byteswap()
-    return a
-
 
 def make_binary_tree(fn, args, **kwargs):
     """Takes a function/class that takes two positional arguments and a list of
@@ -162,7 +117,7 @@ def _varint(i):
         a.append((i & 0x7F) | 0x80)
         i = i >> 7
     a.append(i)
-    return a.tostring()
+    return array_tobytes(a)
 
 
 _varint_cache_size = 512
@@ -296,16 +251,16 @@ def byte_to_float(b, mantissabits=5, zeroexp=2):
 #    0-255. The approximation has high precision at the low end (e.g.
 #    1 -> 0, 2 -> 1, 3 -> 2 ...) and low precision at the high end. Numbers
 #    equal to or greater than 108116 all approximate to 255.
-#    
+#
 #    This is useful for storing field lengths, where the general case is small
 #    documents and very large documents are more rare.
 #    """
-#    
+#
 #    # This encoding formula works up to 108116 -> 255, so if the length is
 #    # equal to or greater than that limit, just return 255.
 #    if length >= 108116:
 #        return 255
-#    
+#
 #    # The parameters of this formula where chosen heuristically so that low
 #    # numbers would approximate closely, and the byte range 0-255 would cover
 #    # a decent range of document lengths (i.e. 1 to ~100000).
@@ -320,7 +275,7 @@ def byte_to_float(b, mantissabits=5, zeroexp=2):
 # Instead of computing the actual formula to get the byte for any given length,
 # precompute the length associated with each byte, and use bisect to find the
 # nearest value. This gives quite a large speed-up.
-# 
+#
 # Note that this does not give all the same answers as the old, "real"
 # implementation since this implementation always "rounds down" (thanks to the
 # bisect_left) while the old implementation would "round up" or "round down"
@@ -369,12 +324,11 @@ def first_diff(a, b):
     byte.
     """
 
-    i = -1
+    i = 0
     for i in xrange(0, len(a)):
-        if a[i] != b[1]:
-            return i
-        if i == 255:
-            return i
+        if a[i] != b[i] or i == 255:
+            break
+    return i
 
 
 def prefix_encode(a, b):
@@ -501,6 +455,65 @@ def unbound_cache(func):
 
 
 def lru_cache(maxsize=100):
+    """Double-barrel least-recently-used cache decorator. This is a simple
+    LRU algorithm that keeps a primary and secondary dict. Keys are checked
+    in the primary dict, and then the secondary. Once the primary dict fills
+    up, the secondary dict is cleared and the two dicts are swapped.
+    
+    This function duplicates (more-or-less) the protocol of the
+    ``functools.lru_cache`` decorator in the Python 3.2 standard library.
+
+    Arguments to the cached function must be hashable.
+
+    View the cache statistics named tuple (hits, misses, maxsize, currsize)
+    with f.cache_info().  Clear the cache and statistics with f.cache_clear().
+    Access the underlying function with f.__wrapped__.
+    """
+
+    def decorating_function(user_function):
+        # Cache1, Cache2, Pointer, Hits, Misses
+        stats = [{}, {}, 0, 0, 0]
+
+        @wraps(user_function)
+        def wrapper(*args):
+            ptr = stats[2]
+            a = stats[ptr]
+            b = stats[not ptr]
+            key = args
+
+            if key in a:
+                stats[3] += 1  # Hit
+                return a[key]
+            elif key in b:
+                stats[3] += 1  # Hit
+                return b[key]
+            else:
+                stats[4] += 1  # Miss
+                result = user_function(*args)
+                a[key] = result
+                if len(a) >= maxsize:
+                    stats[2] = not ptr
+                    b.clear()
+                return result
+
+        def cache_info():
+            """Report cache statistics"""
+            return (stats[3], stats[4], maxsize, len(stats[0]) + len(stats[1]))
+
+        def cache_clear():
+            """Clear the cache and cache statistics"""
+            stats[0].clear()
+            stats[1].clear()
+            stats[3] = stats[4] = 0
+
+        wrapper.cache_info = cache_info
+        wrapper.cache_clear = cache_clear
+
+        return wrapper
+    return decorating_function
+
+
+def clockface_lru_cache(maxsize=100):
     """Least-recently-used cache decorator.
 
     This function duplicates (more-or-less) the protocol of the
@@ -519,7 +532,7 @@ def lru_cache(maxsize=100):
 
     def decorating_function(user_function):
 
-        stats = [0, 0, 0]  # hits, misses
+        stats = [0, 0, 0]  # hits, misses, hand
         data = {}
 
         if maxsize:
@@ -652,11 +665,7 @@ def rcompile(pattern, flags=0, verbose=False):
     return re.compile(pattern, re.UNICODE | flags)
 
 
-try:
-    from abc import abstractmethod  #@UnusedImport
-except ImportError:
-    def abstractmethod(funcobj):
-        """A decorator indicating abstract methods.
-        """
-        funcobj.__isabstractmethod__ = True
-        return funcobj
+
+
+
+

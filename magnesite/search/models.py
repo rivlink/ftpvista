@@ -53,7 +53,7 @@ def search(query, limit=1000):
     parser.remove_plugin_class(BoostPlugin)
     parser.remove_plugin_class(GroupPlugin)
 
-    results = searcher.search(parser.parse(query), limit)
+    results = searcher.search(parser.parse(query), limit=limit)
     
     for result in results:
         server_id = int(result['server_id'])
