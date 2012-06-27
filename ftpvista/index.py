@@ -13,7 +13,7 @@ from whoosh import index
 from whoosh.fields import Schema, ID, IDLIST, KEYWORD, TEXT
 from whoosh.analysis import StandardAnalyzer
 from whoosh.query import Term
-from whoosh.writing import BufferedWriter
+from whoosh.writing import BufferedWriter, AsyncWriter
 from whoosh.analysis import CharsetFilter, StemmingAnalyzer
 from whoosh.support.charset import accent_map
 
