@@ -43,20 +43,7 @@ def construction(request):
     return render_to_response('construction.html')
 
 def index(request):
-
-    servers = []
-    def has_files(server):
-        return server.get_nb_files() > 0
-
-    for server in filter(has_files, models.get_servers()):
-        servers.append({ 'ip' : server.get_ip_addr(),
-                         'nb_files' : server.get_nb_files(),
-                         'files_size' : server.get_files_size(),
-                         'last_seen' : server.get_last_seen(),
-                        })
-    
     return render_to_response('index.html', {'sPrefix' : c.sPrefix,
-                                             'servers' : servers,
                                              'sTrId': u'node-',
                                              'servers': models.get_servers(),
                                              'aFilterFileTypes': SearchFilterFileTypes.getFileTypes([str(c.VIDEOS), str(c.AUDIOS), str(c.IMAGES), str(c.ARCHIVES), str(c.DISKIMAGES)]),
