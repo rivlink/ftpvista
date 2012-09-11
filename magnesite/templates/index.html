@@ -71,7 +71,18 @@
 			$("#ft").multiSelect({
 				oneOrMoreSelected: '*',
 				selectAllText: 'Tous',
-				noneSelected: 'Sélectionner des options' });
+                                noneSelected: 'Sélectionner des options' });
+
+                        // Refresh server statuses in ajax
+                        setTimeout(function(){
+                            $.post(
+                                "/{{ sPrefix }}ajax/online",
+                                function(data){
+                                    $("#servers").html(data);
+                                },
+                                "http"
+                            );
+                        }, 120000); //every 2 minutes
 		});
 	</script>
 	<div id="header">
@@ -119,7 +130,7 @@
 							</ul>
 						</div>
 					</div>
-					<div class="pane">
+					<div id="servers" class="pane">
 						{% include "online.html" %}
 					</div>
 				    <div class="pane">
