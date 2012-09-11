@@ -6,7 +6,7 @@ UNDER_CONSTRUCTION = False
 
 urlpatterns = patterns('',
     (r'^'+c.sPrefix+'$', 'magnesite.search.views.index'),
-    (r'^'+c.sPrefix+'ajax/online/$', 'magnesite.ajax.views.online'),
+    (r'^'+c.sPrefix+'ajax/online$', 'magnesite.ajax.views.online'),
     (r'^'+c.sPrefix+'search/$', 'magnesite.search.views.search'),
     (r'^'+c.sPrefix+'search_results/$', 'magnesite.search.views.search_results'),
     (r'^'+c.sPrefix+'js/(?P<path>.*)$', 'django.views.static.serve', {'document_root': c.path+'templates/js'}),
