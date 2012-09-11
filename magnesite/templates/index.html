@@ -24,7 +24,7 @@
 		
 		$(document).ready(function() {
 			//Create tabs, with history support 
-		    $("ul.tabs").tabs("div.panes > div").history();
+                    $("ul.tabs").tabs("div.panes > div", {history: true});
 
 		    //Show/hide advanced option pane in each tab
 		    $(".plus_sign").click(function(){
