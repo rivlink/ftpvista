@@ -120,13 +120,7 @@
 						</div>
 					</div>
 					<div class="pane">
-						<ul class="server_list">
-							{% for server in servers %}
-								{% autoescape off %}
-								<li class="{{ server.get_online_class }}"><span><a href="ftp://{{ server.get_ip_addr }}">{{ server.get_ip_with_name }}</a> ({{ server.get_nb_files }} fichiers - {{ server.get_files_size|filesizeformat2 }})</span></li>
-								{% endautoescape %}
-							{% endfor %}
-						</ul>
+						{% include "online.html" %}
 					</div>
 				    <div class="pane">
 				    	<a href="#" class="plus_sign">-</a>
