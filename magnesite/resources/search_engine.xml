@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
 <ShortName>ftpvista</ShortName>
-<LongName>ftpvista, moteur de recherche pour ftp</LongName>
+<LongName>FTPvista, moteur de recherche pour ftp</LongName>
 <Developer>Dustri</Developer>
 <Description>Moteur de recherche pour les ftp de la Riverotte</Description>
 <AdultContent>true</AdultContent>
 <InputEncoding>UTF-8</InputEncoding>
 <Tags>ftpvista ftp</Tags>
-<Contact>#riverotte@irc.rezosup.org</Contact>
+<Contact>rivlink@gmail.com</Contact>
 <Language>*</Language>
 <OutputEncoding>UTF-8</OutputEncoding>
 <InputEncoding>UTF-8</InputEncoding>
-<Url type="text/html" method="GET" template="http://www.rivlink.net/ftpvista3/search/?s={searchTerms}&os=1"/>
+<Url type="text/html" method="GET" template="http://www.rivlink.net/ftpvista3/search/?s={searchTerms}&amp;os=1"/>
 </OpenSearchDescription>
