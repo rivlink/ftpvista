@@ -74,15 +74,16 @@
                                 noneSelected: 'Sélectionner des options' });
 
                         // Refresh server statuses in ajax
-                        setTimeout(function(){
+                        var checkservers = function(){
                             $.post(
                                 "/{{ sPrefix }}ajax/online",
                                 function(data){
                                     $("#servers").html(data);
-                                },
-                                "http"
+                                }
                             );
-                        }, 120000); //every 2 minutes
+                            setTimeout(checkservers, 120000); //every 2 minutes
+                        };
+                        setTimeout(checkservers, 120000); //every 2 minutes
 		});
 	</script>
 	<div id="header">
