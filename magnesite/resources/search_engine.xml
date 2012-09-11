@@ -11,6 +11,5 @@
 <Language>*</Language>
 <OutputEncoding>UTF-8</OutputEncoding>
 <InputEncoding>UTF-8</InputEncoding>
-<Url type="text/html" method="GET" template="http://10.0.0.1/ftpvista3/search/?s={searchTerms}"/>
-<!-- <Url type="application/x-suggestions+json" template="http://10.0.0.1/ftpvista3/suggest/?s={searchTerms}"/> -->
+<Url type="text/html" method="GET" template="http://www.rivlink.net/ftpvista3/search/?s={searchTerms}&os=1"/>
 </OpenSearchDescription>

@@ -196,7 +196,9 @@ def main(options):
     config = ConfigParser.SafeConfigParser()
     config.read(options.config_file)
     
-    if options.clean_all:
+    if options.clean:
+        print options.clean
+        os._exit(1)
         s = raw_input('Do you really want to clean ftpvista files (make sure there is no running instances of FTPVista) ? [Y/N] : ')
         if s.upper() == 'Y':
             clean_all(config)
@@ -257,7 +259,7 @@ if __name__ == '__main__':
     parser.add_option("-d", "--daemon", action="store_true", dest="daemon", default=True, help="Run FTPVista as a Daemon")
     parser.add_option("--no-daemon", action="store_false", dest="daemon", help="Don't run FTPVista as a Daemon")
     parser.add_option("-o", "--only-check-online", action="store_true", dest="only_check_online", help="Launch only online server checking module")
-    parser.add_option("--clean-all", action="store_true", dest="clean_all", help="Empty the index, the online database and the music database")
+    parser.add_option("--clean", choices=["db","player","index","all"], default="all", help="Empty the index, or one of the database, or everything !")
     
     (options, args) = parser.parse_args()
     
