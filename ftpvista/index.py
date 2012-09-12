@@ -49,6 +49,7 @@ class Index (object):
         return Schema(server_id=ID(stored=True),
                       path=TEXT(analyzer=my_analyzer, stored=True),
                       name=TEXT(analyzer=my_analyzer, stored=True),
+                      ext=TEXT(analyzer=my_analyzer, stored=True),
                       size=ID(stored=True),
                       mtime=ID(stored=True),
                       audio_album=TEXT(analyzer=my_analyzer,
@@ -82,6 +83,7 @@ class Index (object):
             writer.delete_by_query(Term('server_id', serverid) & 
                                       Term('path', path))
             # Deleting musics from rivplayer database
+            #TODO put extensions in config file
             if path.lower().endswith('.mp3'):
                 persist.del_track(path)
 
@@ -128,8 +130,13 @@ class Index (object):
 
         # passing the optional arguments is quite a mess
         # let's build a dict for that purpose
+
+        _, ext = os.path.splitext(name)
+        ext = ext.lstrip('.')
+
         kwargs = {'server_id' : server_id,
                   'name' : name,
+                  'ext'  : ext,
                   'path' : path,
                   'size' : size,
                   'mtime': mtime}
@@ -351,9 +358,11 @@ class IndexUpdateCoordinator(object):
         scanner = FTPScanner(server_addr)
         files = scanner.scan(max_depth=self._max_depth)
         if files == None:
-            self.log.error('Impossible to scan any file, fuck it.')
+            self.log.error('Impossible to scan any file, f**k it.')
             return
-
+        if len(files) == 0:
+            self.log.info('No file in this FTP, we can skip it.')
+            pass
         # compute the size of all the files found
         size = reduce(lambda total_size, file: total_size + file[1], files, 0)
         self.log.info('Found %d files (%d G) on %s' % (len(files),

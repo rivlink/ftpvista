@@ -14,8 +14,8 @@ import multiprocessing
 class ARPSniffer (observer.Observable):
     """Finds the connected hosts by sniffing the ARP packets.
 
-        This class uses the Observer/Observable design pattern :
-        register an Observer to be notified whenever an IP is found.
+       This class uses the Observer/Observable design pattern :
+       register an Observer to be notified whenever an IP is found.
     """
 
     def __init__(self):
@@ -24,13 +24,11 @@ class ARPSniffer (observer.Observable):
 
     def run(self):
         """Run the sniffer"""
-
         try:
             sniff(filter="arp", prn=self._arp_callback, store=False, stop_filter=self._stopper)
         except TypeError, e:
             print "Ok! This error likely happened because you are not using scapy version 2.2 or above"
             raise
-
 
     def stop(self):
         self.terminate = True
@@ -40,16 +38,14 @@ class ARPSniffer (observer.Observable):
             self.notify_observers(pkt[ARP].psrc)
             self.notify_observers(pkt[ARP].pdst)   # FIXME : is this necessary ?
 
-
     def _stopper(self, _):
         return self.terminate
-
 
 class SnifferToPipelineAdapter (observer.Observer):
     """Adapter class.
 
-      Connects a sniffer to a pipeline by executing it everytime the sniffer
-      notifies for a ip address found.
+       Connects a sniffer to a pipeline by executing it everytime the sniffer
+       notifies for a ip address found.
     """
 
     def __init__(self, sniffer, pipeline):
@@ -116,32 +112,3 @@ def build_machine_filter_pipeline(blacklist, valid_addr_pattern,
 
     return pipeline
 
-
-if __name__ == "__main__" :
-    import signal
-
-
-    VALID_ADDR_PATTERN = '^10.0.0.1|(10.(6|8|82|83|10|11).\d{0,3}.\d{0,3})$'
-
-    class EchoStage (pipeline.Stage):
-        """Print the contexts reaching this stage"""
-
-        def execute(self, ip_addr):
-            print "Address : %s" % ip_addr
-            return True
-
-    sniffer = ARPSniffer()
-
-    def SIGTERM_handler(signalnum, frame):
-        sniffer.stop()
-
-    # setup the pipeline and bind it to the sniffer
-    pipeline = build_machine_filter_pipeline([], VALID_ADDR_PATTERN, 10 * 60)
-    pipeline.append_stage(EchoStage())
-    SnifferToPipelineAdapter(sniffer, pipeline)
-
-    # setut the signal handler to top the sniffer on SIGTERM
-    signal.signal(signal.SIGTERM, SIGTERM_handler)
-
-    # Run sniffer, run ..
-    sniffer.run()
