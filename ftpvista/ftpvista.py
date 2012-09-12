@@ -53,27 +53,59 @@ def sniffer_task(queue, blacklist, valid_ip_pattern):
     sniffer.run()
 
 def clean_all(config):
+    clean_db(config)
+    clean_index(config)
+    clean_player(config)
+    
+def clean_db(config):
     logging.basicConfig(level=logging.DEBUG,
                         format='%(asctime)s %(levelname)s:%(name)s:%(message)s',
                         filename=config.get('logs', 'main'))
-    log = logging.getLogger('ftpvista')
-    log.info('Starting FTPVista cleaning')
+    log = logging.getLogger('ftpvista.clean_db')
+    log.info('Starting FTPVista cleaning : db')
+    
+    db_uri = config.get('db', 'uri')
+    uri_strip = "/" + db_uri.lstrip('sqlite://')
+    if os.path.isfile(uri_strip):
+        persist = ftpvista_persist.FTPVistaPersist(db_uri)
+        persist.initialize_store()
+        os.remove(uri_strip)
+        log.info("Database deleted")
+    else:
+        log.info("No database : skipping.")
+
+def clean_index(config):
+    logging.basicConfig(level=logging.DEBUG,
+                        format='%(asctime)s %(levelname)s:%(name)s:%(message)s',
+                        filename=config.get('logs', 'main'))
+    log = logging.getLogger('ftpvista.clean_index')
+    log.info('Starting FTPVista cleaning : index')
+    
+    index_uri = config.get('index', 'uri')
+    if os.path.isdir(index_uri):
+        shutil.rmtree(index_uri)
+        log.info("Index deleted")
+    else:
+        log.info("Index not found : skipping.")
+
+def clean_player(config):
+    logging.basicConfig(level=logging.DEBUG,
+                        format='%(asctime)s %(levelname)s:%(name)s:%(message)s',
+                        filename=config.get('logs', 'main'))
+    log = logging.getLogger('ftpvista.clean_player')
+    log.info('Starting FTPVista cleaning : player')
     
     db_uri = config.get('db', 'uri')
     rivplayer_uri = config.get('db', 'rivplayer_uri')
     if rivplayer_uri == 'None':
         rivplayer_uri = None
-    persist = ftpvista_persist.FTPVistaPersist(db_uri, rivplayer_uri)
-    persist.initialize_store()
-    
-    index_uri = config.get('index', 'uri')
-    
-    # Clean music database
-    persist.truncate_all()
-    # Delete SQLite database
-    os.remove("/" + db_uri.lstrip('sqlite://'))
-    # Erase index folder
-    shutil.rmtree(index_uri)
+    if rivplayer_uri is None:
+        log.info("No music database: skipping.")
+    else:
+        persist = ftpvista_persist.FTPVistaPersist(db_uri, rivplayer_uri)
+        persist.initialize_store()
+        persist.truncate_all()
+        log.info("Player database cleaned")
 
 def check_online(config):
     logging.basicConfig(level=logging.DEBUG,
@@ -197,11 +229,21 @@ def main(options):
     config.read(options.config_file)
     
     if options.clean:
-        print options.clean
-        os._exit(1)
-        s = raw_input('Do you really want to clean ftpvista files (make sure there is no running instances of FTPVista) ? [Y/N] : ')
-        if s.upper() == 'Y':
-            clean_all(config)
+        s = 'Do you really want to clean ftpvista {clean: %s} (make sure there is no running instances of FTPVista) ? [Y/N] : ' % options.clean
+        fct = None
+        if options.clean == 'all':
+            fct = clean_all
+        elif options.clean == 'db':
+            fct = clean_db
+        elif options.clean == 'player':
+            fct = clean_player
+        elif options.clean == 'index':
+            fct = clean_index
+        else:
+            raise Exception ("Invalid value %s for paramter --clean" % options.clean)
+        result = raw_input(s)
+        if result.upper() == 'Y':
+            fct(config)
             return 0
         else:
             return 0
@@ -259,7 +301,7 @@ if __name__ == '__main__':
     parser.add_option("-d", "--daemon", action="store_true", dest="daemon", default=True, help="Run FTPVista as a Daemon")
     parser.add_option("--no-daemon", action="store_false", dest="daemon", help="Don't run FTPVista as a Daemon")
     parser.add_option("-o", "--only-check-online", action="store_true", dest="only_check_online", help="Launch only online server checking module")
-    parser.add_option("--clean", choices=["db","player","index","all"], default="all", help="Empty the index, or one of the database, or everything !")
+    parser.add_option("--clean", choices=["db","player","index","all"], help="Empty the index, or one of the database, or everything !")
     
     (options, args) = parser.parse_args()
     
