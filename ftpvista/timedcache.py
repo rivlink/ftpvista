@@ -17,11 +17,9 @@ class TimedCache:
         return obj in self._objs
 
     def _remove_outdated(self):
-        if len(self._queue) > 0:
-            if (self._current_time() - self._objs[self._queue[-1]]) \
-                > self._timeout:
-                del self._objs[self._queue.pop()]
-                self._remove_outdated()
+        while len(self._queue) > 0 and (self._current_time() - self._objs[self._queue[-1]]) \
+            > self._timeout:
+            del self._objs[self._queue.pop()]
 
     def add(self, obj):
         if obj not in self:
