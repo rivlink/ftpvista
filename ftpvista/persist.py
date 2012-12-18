@@ -352,3 +352,7 @@ class FTPVistaPersist(object):
 
     def save(self):
         self.session.commit()
+    
+    def rollback(self):
+        self.session.rollback()
+
