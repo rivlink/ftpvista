@@ -1,3 +1,4 @@
 *.pyc
 ftpvista.db
 ftpvista_idx
+ftpvista.conf

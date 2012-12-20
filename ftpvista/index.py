@@ -341,7 +341,6 @@ class IndexUpdateCoordinator(object):
     def update_server(self, server_addr):
         """Update the server at the given address if an update is needed."""
         server = self._persist.get_server_by_ip(server_addr)
-        
         if(datetime.now() - server.get_last_scanned()) >= self._update_interval:
             self._do_update(server)
 
@@ -361,7 +360,7 @@ class IndexUpdateCoordinator(object):
         if len(files) == 0:
             self.log.info('No file in this FTP, we can skip it.')
             self._persist.rollback()
-            pass
+            return
         # compute the size of all the files found
         size = reduce(lambda total_size, file: total_size + file[1], files, 0)
         self.log.info('Found %d files (%d G) on %s' % (len(files),

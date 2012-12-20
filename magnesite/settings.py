@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # Django settings for mysite project.
+import os.path as path
 
 DEBUG = True
 TEMPLATE_DEBUG = DEBUG
@@ -9,6 +10,7 @@ ADMINS = (
 )
 
 
+PROJECT_DIR = path.dirname(__file__)
 WHOOSH_IDX = '/home/ftpvista/ftpvista_idx'
 PERSIST_DB = 'sqlite:////home/ftpvista/ftpvista.db'
 
@@ -75,7 +77,7 @@ MIDDLEWARE_CLASSES = (
 ROOT_URLCONF = 'magnesite.urls'
 
 TEMPLATE_DIRS = (
-    "/home/ftpvista/ftpvista3/magnesite/templates"
+    path.join(PROJECT_DIR, "templates")
 )
 
 INSTALLED_APPS = (

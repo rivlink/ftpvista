@@ -102,13 +102,25 @@ class FTPServerFilter (pipeline.Stage):
     def execute(self, ip_addr):
         return self._scanner.is_ftp_open(ip_addr)
 
-def build_machine_filter_pipeline(blacklist, valid_addr_pattern,
+   
+class PutInQueueStage (pipeline.Stage):
+    """Put all the recieved  IP addresses in the specified queue"""
+    def __init__(self, queue):
+        self._queue = queue
+
+    def execute(self, ip_addr):
+        self._queue.put(ip_addr)
+        return True
+
+
+def build_machine_filter_pipeline(queue, blacklist, valid_addr_pattern,
                                   drop_duplicate_timeout):
     pipeline = Pipeline()
     pipeline.append_stage(BlacklistFilter(blacklist))
     pipeline.append_stage(ValidAddressFilter(valid_addr_pattern))
     pipeline.append_stage(DropRecentDuplicateFilter(drop_duplicate_timeout))
     pipeline.append_stage(FTPServerFilter())
+    pipeline.append_stage(PutInQueueStage(queue))
 
     return pipeline
 

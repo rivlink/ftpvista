@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 import sys
 import logging
-sys.path.append("/home/ftpvista/ftpvista3/ftpvista")
+import os.path as path
 from django.db import models
 from django.conf import settings
 
+sys.path.append(path.abspath(path.dirname(__file__)+'/../../ftpvista/'))
 from whoosh import index as whoosh_index
 from whoosh.qparser import *
 

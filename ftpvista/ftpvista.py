@@ -4,9 +4,8 @@
 import logging
 import ConfigParser
 from datetime import timedelta
-from Queue import Queue
-from threading import Thread
 from optparse import OptionParser
+from multiprocessing import Queue
 import socket
 import os
 import time
@@ -20,33 +19,23 @@ import shutil
 os.environ['TZ'] = 'CET'
 
 from index import Index, IndexUpdateCoordinator
+from multiprocess import OwnedProcess
 import persist as ftpvista_persist
 import pipeline
 import observer
 from sniffer import *
 
-flock = None
-context = None
-pidfile = None
-sniffer = None
-
-class PutInQueueStage (pipeline.Stage):
-    """Put all the recieved  IP addresses in the specified queue"""
-    def __init__(self, queue):
-        self._queue = queue
-
-    def execute(self, ip_addr):
-        self._queue.put(ip_addr)
+class HandleMain():
+    flock = None
+    context = None
+    pidfile = None
 
 def sniffer_task(queue, blacklist, valid_ip_pattern):
-    global sniffer
     # create an ARP sniffer for discovering the hosts
     sniffer = ARPSniffer()
-
     # Bind the sniffer to a filtering pipeline to discard uninteresting IP
-    pipeline = build_machine_filter_pipeline(blacklist, valid_ip_pattern,
+    pipeline = build_machine_filter_pipeline(queue, blacklist, valid_ip_pattern,
                                              drop_duplicate_timeout=10*60)
-    pipeline.append_stage(PutInQueueStage(queue))
     SnifferToPipelineAdapter(sniffer, pipeline)
     
     # Run sniffer, run ..
@@ -130,7 +119,7 @@ def check_online(config):
     
     persist.launch_online_checker(update_interval, purge_interval)
 
-def main_daemonized(config):
+def main_daemonized(config, ftpserver_queue):
     
     logging.basicConfig(level=logging.DEBUG,
                         format='%(asctime)s %(levelname)s:%(name)s:%(message)s',
@@ -138,30 +127,6 @@ def main_daemonized(config):
 
     log = logging.getLogger('ftpvista')
     log.info('Starting FTPVista')
-    
-    # The detected FTP server IP will be put in this queue waiting the
-    # update coordinator to handle them
-    ftpserver_queue = Queue(100)
-
-    # Configure the sniffer task and run it in a different thread
-    blacklist = config.get('indexer', 'blacklist', '').split(',')
-    valid_ip_pattern = config.get('indexer', 'valid_ip_pattern')
-    sniffer_proc = Thread(target=sniffer_task, args=(ftpserver_queue,
-                                            blacklist, valid_ip_pattern))
-    
-    log.info('Launching the sniffer thread')
-    sniffer_proc.start()
-    
-    """
-    ## From now we can set the application to use a different user id and group id
-    ## much better for security reasons
-    uid = config.getint('indexer', 'uid')
-    gid = config.getint('indexer', 'gid')
-    
-    log.info('Setting uid=%d and gid=%d' % (uid, gid))
-    os.setgid(gid)
-    os.setuid(uid)
-    """
 
     # Set the socket connection timeout, so that people with
     # broken FTPs will time out quickly, rather than hang the scanner.
@@ -195,39 +160,43 @@ def sigterm_handler(signum, frame):
     close_daemon()
 
 def close_daemon():
-    global flock
-    global context
-    global sniffer
     destroy_pid_file()
-    if flock is not None:
-        flock.release()
-    if context is not None:
-        context.close()
-    if sniffer is not None:
-        sniffer.stop()
+    if HandleMain.flock is not None:
+        HandleMain.flock.release()
+    if HandleMain.context is not None:
+        HandleMain.context.close()
+    OwnedProcess.terminateall()
     os._exit(os.EX_OK)
 
 def cleanup_and_close():
     pass
 
 def create_pid_file(pid_file):
-    global pidfile
-    pidfile = pid_file
-    f = open(pidfile, 'w')
+    HandleMain.pidfile = pid_file
+    f = open(HandleMain.pidfile, 'w')
     f.write(str(os.getpid()))
     
 def destroy_pid_file():
-    global pidfile
-    if pidfile is not None:
-        os.remove(pidfile)
+    if HandleMain.pidfile is not None:
+        os.remove(HandleMain.pidfile)
 
 def main(options):
-    global flock
-    global context
-    
     config = ConfigParser.SafeConfigParser()
     config.read(options.config_file)
     
+    ## From now we can set the application to use a different user id and group id
+    ## much better for security reasons
+    uid = config.getint('indexer', 'uid')
+    gid = config.getint('indexer', 'gid')
+    
+    # The detected FTP server IP will be put in this queue waiting the
+    # update coordinator to handle them
+    ftpserver_queue = Queue(100)
+
+    # Configure the sniffer task and run it in a different thread
+    blacklist = str(config.get('indexer', 'blacklist', '')).split(',')
+    valid_ip_pattern = config.get('indexer', 'valid_ip_pattern')
+
     if options.clean:
         s = 'Do you really want to clean ftpvista {clean: %s} (make sure there is no running instances of FTPVista) ? [Y/N] : ' % options.clean
         fct = None
@@ -244,47 +213,52 @@ def main(options):
         result = raw_input(s)
         if result.upper() == 'Y':
             fct(config)
-            return 0
-        else:
-            return 0
+        return 0
     
     """Daemonize FTPVista"""
     if options.daemon:
         #Context
-        context = daemon.DaemonContext(
+        HandleMain.context = daemon.DaemonContext(
             working_directory = config.get('indexer', 'working_directory')
         )
         
         #Mapping signals to methods
-        context.signal_map = {
-            signal.SIGTERM: 'sigterm_handler',
-            signal.SIGHUP: 'sigterm_handler',
-            signal.SIGINT: 'sigterm_handler',
+        HandleMain.context.signal_map = {
+            signal.SIGTERM: sigterm_handler,
+            signal.SIGHUP: sigterm_handler,
+            signal.SIGINT: sigterm_handler,
             #signal.SIGUSR1: reload_program_config,
         }
-        context.detach_process = True
-        context.sigterm_handler = sigterm_handler
-        context.open()
+        HandleMain.context.detach_process = True
+        HandleMain.context.sigterm_handler = sigterm_handler
+        HandleMain.context.open()
+    else:
+        signal.signal(signal.SIGTERM, sigterm_handler)
+        signal.signal(signal.SIGHUP, sigterm_handler)
+        signal.signal(signal.SIGINT, sigterm_handler)
+
     
     if options.only_check_online:
         if options.daemon:
             create_pid_file(config.get('online_checker', 'pid'))
-            flock = lockfile.FileLock(config.get('online_checker', 'pid'))
-            if flock.is_locked():
+            HandleMain.flock = lockfile.FileLock(config.get('online_checker', 'pid'))
+            if HandleMain.flock.is_locked():
                 print ("Already launched ... exiting")
                 sys.exit(3)
-            flock.acquire()
+            HandleMain.flock.acquire()
         check_online(config)
     else:
         if options.daemon:
             create_pid_file(config.get('indexer', 'pid'))
-            flock = lockfile.FileLock(config.get('indexer', 'pid'))
-            if flock.is_locked():
+            HandleMain.flock = lockfile.FileLock(config.get('indexer', 'pid'))
+            if HandleMain.flock.is_locked():
                 print ("Already launched ... exiting")
                 sys.exit(2)
-            flock.acquire()
+            HandleMain.flock.acquire()
         try:
-            main_daemonized(config)
+            OwnedProcess(uid=uid, gid=gid, target=main_daemonized, args=(config, ftpserver_queue)).start()
+            OwnedProcess(target=sniffer_task, args=(ftpserver_queue, blacklist, valid_ip_pattern)).start()
+            OwnedProcess.joinall()
         except Exception as e:
             logging.basicConfig(level=logging.DEBUG,
                 format='%(asctime)s %(levelname)s:%(name)s:%(message)s',
