@@ -198,7 +198,7 @@ def main(options):
     valid_ip_pattern = config.get('indexer', 'valid_ip_pattern')
 
     if options.clean:
-        s = 'Do you really want to clean ftpvista {clean: %s} (make sure there is no running instances of FTPVista) ? [Y/N] : ' % options.clean
+        s = 'Do you really want to clean ftpvista {clean: %s} (make sure there is no running instances of FTPVista) ? [y/N] : ' % options.clean
         fct = None
         if options.clean == 'all':
             fct = clean_all
@@ -209,7 +209,7 @@ def main(options):
         elif options.clean == 'index':
             fct = clean_index
         else:
-            raise Exception ("Invalid value %s for paramter --clean" % options.clean)
+            raise Exception ("Invalid value %s for parameter --clean" % options.clean)
         result = raw_input(s)
         if result.upper() == 'Y':
             fct(config)
@@ -237,36 +237,35 @@ def main(options):
         signal.signal(signal.SIGHUP, sigterm_handler)
         signal.signal(signal.SIGINT, sigterm_handler)
 
-    
-    if options.only_check_online:
-        if options.daemon:
-            create_pid_file(config.get('online_checker', 'pid'))
-            HandleMain.flock = lockfile.FileLock(config.get('online_checker', 'pid'))
-            if HandleMain.flock.is_locked():
-                print ("Already launched ... exiting")
-                sys.exit(3)
-            HandleMain.flock.acquire()
-        check_online(config)
-    else:
-        if options.daemon:
-            create_pid_file(config.get('indexer', 'pid'))
-            HandleMain.flock = lockfile.FileLock(config.get('indexer', 'pid'))
-            if HandleMain.flock.is_locked():
-                print ("Already launched ... exiting")
-                sys.exit(2)
-            HandleMain.flock.acquire()
-        try:
+    try:
+        if options.only_check_online:
+            if options.daemon:
+                create_pid_file(config.get('online_checker', 'pid'))
+                HandleMain.flock = lockfile.FileLock(config.get('online_checker', 'pid'))
+                if HandleMain.flock.is_locked():
+                    print ("Already launched ... exiting")
+                    sys.exit(3)
+                HandleMain.flock.acquire()
+            OwnedProcess(target=check_online, args=(config,)).start()
+        else:
+            if options.daemon:
+                create_pid_file(config.get('indexer', 'pid'))
+                HandleMain.flock = lockfile.FileLock(config.get('indexer', 'pid'))
+                if HandleMain.flock.is_locked():
+                    print ("Already launched ... exiting")
+                    sys.exit(2)
+                HandleMain.flock.acquire()
             OwnedProcess(uid=uid, gid=gid, target=main_daemonized, args=(config, ftpserver_queue)).start()
             OwnedProcess(target=sniffer_task, args=(ftpserver_queue, blacklist, valid_ip_pattern)).start()
-            OwnedProcess.joinall()
-        except Exception as e:
-            logging.basicConfig(level=logging.DEBUG,
-                format='%(asctime)s %(levelname)s:%(name)s:%(message)s',
-                filename=config.get('logs', 'main'))
-            log = logging.getLogger('ftpvista.main')
-            log.error('Error in main : %s', traceback.format_exc())
-            close_daemon()
-            raise
+        OwnedProcess.joinall()
+    except Exception as e:
+        logging.basicConfig(level=logging.DEBUG,
+            format='%(asctime)s %(levelname)s:%(name)s:%(message)s',
+            filename=config.get('logs', 'main'))
+        log = logging.getLogger('ftpvista.main')
+        log.error('Error in main : %s', traceback.format_exc())
+        close_daemon()
+        raise
 
 if __name__ == '__main__':
     parser = OptionParser(version="FTPVista 3.0")
