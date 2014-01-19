@@ -1,23 +1,21 @@
 # -*- coding: utf-8 -*-
 from django.conf.urls.defaults import *
+from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 import app.const as c
 
 UNDER_CONSTRUCTION = False
 
 urlpatterns = patterns('',
-    (r'^'+c.sPrefix+'$', 'magnesite.search.views.index'),
-    (r'^'+c.sPrefix+'ajax/online$', 'magnesite.ajax.views.online'),
-    (r'^'+c.sPrefix+'search/$', 'magnesite.search.views.search'),
-    (r'^'+c.sPrefix+'search_results/$', 'magnesite.search.views.search_results'),
-    (r'^'+c.sPrefix+'js/(?P<path>.*)$', 'django.views.static.serve', {'document_root': c.path+'templates/js'}),
-    (r'^'+c.sPrefix+'images/(?P<path>.*)$', 'django.views.static.serve', {'document_root': c.path+'templates/images'}),
-    (r'^'+c.sPrefix+'css/(?P<path>.*)$', 'django.views.static.serve', {'document_root': c.path+'templates/css'}),
-    (r'^'+c.sPrefix+'resources/(?P<path>.*)$', 'django.views.static.serve', {'document_root': c.path+'resources'})
+    url(r'^$', 'magnesite.search.views.index'),
+    url(r'^ajax/online$', 'magnesite.ajax.views.online', name='online'),
+    url(r'^search/$', 'magnesite.search.views.search', name='search'),
+    url(r'^search_results/$', 'magnesite.search.views.search_results'),
+    url(r'^static/(?P<path>.*)$', 'django.contrib.staticfiles.views.serve', name="static"),
 )
 
 if UNDER_CONSTRUCTION:
     urlpatterns = patterns('',
-        (r'^'+c.sPrefix+'$', 'magnesite.search.views.construction'),
-        (r'^'+c.sPrefix+'search/$', 'magnesite.search.views.construction'),
-        (r'^'+c.sPrefix+'search_results/$', 'magnesite.search.views.construction')
+        (r'^$', 'magnesite.search.views.construction'),
+        (r'^search/$', 'magnesite.search.views.construction'),
+        (r'^search_results/$', 'magnesite.search.views.construction')
     )

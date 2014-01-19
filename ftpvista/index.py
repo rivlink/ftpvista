@@ -51,7 +51,7 @@ class Index (object):
                       name=TEXT(analyzer=my_analyzer, stored=True),
                       ext=TEXT(analyzer=my_analyzer, stored=True),
                       size=ID(stored=True),
-                      mtime=ID(stored=True),
+                      mtime=ID(stored=True, sortable=True),
                       audio_album=TEXT(analyzer=my_analyzer,
                                        stored=True),
                       audio_performer=TEXT(analyzer=my_analyzer,

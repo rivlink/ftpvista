@@ -8,6 +8,7 @@ from django.conf import settings
 sys.path.append(path.abspath(path.dirname(__file__)+'/../../ftpvista/'))
 from whoosh import index as whoosh_index
 from whoosh.qparser import *
+from whoosh.query import Regex,Or,And,Term
 
 from datetime import datetime, timedelta
 
@@ -19,9 +20,10 @@ from persist import FTPVistaPersist
 persist = FTPVistaPersist(settings.PERSIST_DB)
 
 
-def search(query, limit=1000):
+def search(query, online=False, exts=None, pagenum=1, pagelen=1000):
     index = whoosh_index.open_dir(settings.WHOOSH_IDX)
     is_online_cache = {}
+    searchfilter = None
     
     logging.basicConfig(level=logging.INFO,
                         format='%(asctime)s %(levelname)s:%(name)s:%(message)s',
@@ -54,7 +56,28 @@ def search(query, limit=1000):
     parser.remove_plugin_class(BoostPlugin)
     parser.remove_plugin_class(GroupPlugin)
 
-    results = searcher.search(parser.parse(query), limit=limit)
+    if online:
+        online_servers_id = []
+        for server in persist.get_servers():
+            if is_online(server):
+                online_servers_id.append(Term("server_id", server.get_server_id()))
+        if len(online_servers_id) > 0:
+            searchfilter = Or(online_servers_id)
+
+    if exts is not None:
+        extensionfilter = []
+        for extension in exts:
+            extensionfilter.append(Term("ext", extension))
+        if searchfilter is not None:
+            searchfilter = searchfilter & Or(extensionfilter)
+        else:
+            searchfilter = Or(extensionfilter)
+    
+    finalquery = parser.parse(query)
+    if searchfilter is not None:
+        finalquery = finalquery & searchfilter
+    
+    results = searcher.search_page(finalquery, pagenum, pagelen=pagelen)
     
     for result in results:
         server_id = int(result['server_id'])

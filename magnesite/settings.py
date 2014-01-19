@@ -80,10 +80,19 @@ TEMPLATE_DIRS = (
     path.join(PROJECT_DIR, "templates")
 )
 
+STATIC_ROOT = path.join(PROJECT_DIR, 'static')
+
+STATIC_URL = 'static/'
+
+STATICFILES_DIRS = (
+    path.join(PROJECT_DIR, 'staticfiles'),
+)
+
 INSTALLED_APPS = (
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
+    'django.contrib.staticfiles',
     'django.contrib.sites',
     'magnesite.search',
     'magnesite.app'

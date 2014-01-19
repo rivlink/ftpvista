@@ -1,153 +1,154 @@
 {% load custom_filters %}
+{% load url from future %}
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
-	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-	<title>FTPVista 3.0</title>
-	
-	<link rel="search" type="application/opensearchdescription+xml" title="ftpvista" href="/{{ sPrefix }}resources/search_engine.xml" />
-	<link rel="stylesheet" type="text/css" href="/{{ sPrefix }}css/tabs.css" />
-	<link rel="stylesheet" type="text/css" href="/{{ sPrefix }}css/jquery.treetable.css" />
-	<link rel="stylesheet" type="text/css" href="/{{ sPrefix }}css/global.css" />
-	<link href="/{{ sPrefix }}css/jquery.multiSelect.css" rel="stylesheet" type="text/css" />
-	
-	<script type="text/javascript" src="/{{ sPrefix }}js/jquery.tools.min.js"></script>
-	<script type="text/javascript" src="/{{ sPrefix }}js/jquery.treetable.min.js"></script>
-	<script src="/{{ sPrefix }}js/jquery.bgiframe.min.js" type="text/javascript"></script>
-	<script src="/{{ sPrefix }}js/jquery.multiSelect.js" type="text/javascript"></script>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <title>FTPVista 3.0</title>
+    
+        <link rel="search" type="application/opensearchdescription+xml" title="ftpvista" href="{% url 'static' 'resources/search_engine.xml' %}" />
+        <link href="{% url 'static' 'css/global.css' %}" type="text/css" rel="stylesheet"></script>
+        <link href="{% url 'static' 'css/tabs.css' %}" type="text/css" rel="stylesheet"></script>
+        <link href="{% url 'static' 'css/jquery.treetable.css' %}" type="text/css" rel="stylesheet"></script>
+        <link href="{% url 'static' 'css/jquery.multiSelect.css' %}" type="text/css" rel="stylesheet"></script>
+        <script src="{% url 'static' 'js/jquery.tools.min.js' %}" type="text/javascript"></script>
+        <script src="{% url 'static' 'js/jquery.treetable.min.js' %}" type="text/javascript"></script>
+        <script src="{% url 'static' 'js/jquery.bgiframe.min.js' %}" type="text/javascript"></script>
+        <script src="{% url 'static' 'js/jquery.multiSelect.js' %}" type="text/javascript"></script>
 </head>
 <body>
-	<script type="text/javascript">
-		function addSearchProvider(){
-			window.external.AddSearchProvider('/{{ sPrefix }}resources/search_engine.xml');
-		};
-		
-		$(document).ready(function() {
-			//Create tabs, with history support 
-                    $("ul.tabs").tabs("div.panes > div", {history: true});
+    <script type="text/javascript">
+        function addSearchProvider(){
+            window.external.AddSearchProvider('/{% url "static" "resources/search_engine.xml" %}');
+        };
+        
+        $(document).ready(function() {
+            //Create tabs, with history support 
+            $("ul.tabs").tabs("div.panes > div", {history: true});
 
-		    //Show/hide advanced option pane in each tab
-		    $(".plus_sign").click(function(){
-			    var sTxt = ' Filtres';
-		    	var cur_pane = $(this);
-		    	cur_pane.next(".advanced_pane").toggle("fast");
-			    if (cur_pane.html().indexOf('+') != -1)
-			    	cur_pane.html("-" + sTxt);
-			    else
-			    	cur_pane.html("+" + sTxt);
-		    	//To avoid the execution of the # in the href
-			    return false;
-		    });
-		    
-		    if (window.external){
-			    if ('AddSearchProvider' in window.external) {
-				    $("#summary").append("<span style=\"float:right;\"><a title=\"Add me !\" href=\"javascript:addSearchProvider();\">FTPVista dans ton navigateur !</a></span>")
-			    }
-		    }
-		    
-			//TreeTable
-			/*
-			$("#browser").treeTable({
-				  expandable: true,
-				  childPrefix: "child-of-",
-				  clickableNodeNames: false,
-				  indent: 19,
-				  initialState: "collapsed"
-			});
-			*/
+            //Show/hide advanced option pane in each tab
+            $(".plus_sign").click(function(){
+                var sTxt = ' Filtres';
+                var cur_pane = $(this);
+                cur_pane.next(".advanced_pane").toggle("fast");
+                if (cur_pane.html().indexOf('+') != -1)
+                    cur_pane.html("-" + sTxt);
+                else
+                    cur_pane.html("+" + sTxt);
+                //To avoid the execution of the # in the href
+                return false;
+            });
+            
+            if (window.external){
+                if ('AddSearchProvider' in window.external) {
+                    $("#summary").append("<span style=\"float:right;\"><a title=\"Add me !\" href=\"javascript:addSearchProvider();\">FTPVista dans ton navigateur !</a></span>")
+                }
+            }
+            
+            //TreeTable
+            /*
+            $("#browser").treeTable({
+                  expandable: true,
+                  childPrefix: "child-of-",
+                  clickableNodeNames: false,
+                  indent: 19,
+                  initialState: "collapsed"
+            });
+            */
 
-			// Make visible a clicked row
-			$("#browser tbody tr").mousedown(function() {
-			  $("tr.selected").removeClass("selected"); // Deselect currently selected rows
-			  $(this).addClass("selected");
-			});
+            // Make visible a clicked row
+            $("#browser tbody tr").mousedown(function() {
+                $("tr.selected").removeClass("selected"); // Deselect currently selected rows
+                $(this).addClass("selected");
+            });
 
-			// Make sure row is selected when span is clicked
-			$("#browser tbody tr span").mousedown(function() {
-			  $($(this).parents("tr")[0]).trigger("mousedown");
-			});
+            // Make sure row is selected when span is clicked
+            $("#browser tbody tr span").mousedown(function() {
+                $($(this).parents("tr")[0]).trigger("mousedown");
+            });
 
-			//Custom Multiselect
-			$("#ft").multiSelect({
-				oneOrMoreSelected: '*',
-				selectAllText: 'Tous',
-                                noneSelected: 'Sélectionner des options' });
+            //Custom Multiselect
+            $("#ft").multiSelect({
+                oneOrMoreSelected: '*',
+                selectAllText: 'Tous',
+                noneSelected: 'Sélectionner des options'
+            });
 
-                        // Refresh server statuses in ajax
-                        var checkservers = function(){
-                            $.post(
-                                "/{{ sPrefix }}ajax/online",
-                                function(data){
-                                    $("#servers").html(data);
-                                }
-                            );
-                            setTimeout(checkservers, 120000); //every 2 minutes
-                        };
-                        setTimeout(checkservers, 120000); //every 2 minutes
-		});
-	</script>
-	<div id="header">
-		<h1>FTPVista</h1>
-	</div>
-	<div id="summary"><span>{{ nb_files }} fichiers - Total : {{ files_size|filesizeformat2 }}</span></div>
-	<div id="search">
-		<form method="get" action="/{{ sPrefix }}search">
-			<div id="tabs">
-				<!-- the tabs -->
-				<ul class="tabs">
-				    <li><a id="t1" href="#search">Recherche</a></li>
-				    <li><a id="t2" href="#server-list">Liste des serveurs</a></li>
-				    <li><a id="t3" href="#last">Afficher les derniers fichiers</a></li>
-				</ul>
-				
-				<!-- tab "panes" -->
-				<div class="panes">
-				    <div class="pane">
-				    	<p>
-					    	<input type="text" id="s" name="s" value="{{ query }}" />
-							<input type="submit" value="Rechercher" />
-						</p>
-						
-				    	<a href="#" class="plus_sign">- Filtres</a>
-						<div class="advanced_pane">
-							<hr />
-							<ul>
-								<li>
-									<!-- File type filter -->
-									<label for="ft">Type de fichiers</label>
-									<select id="ft" name="ft" multiple="multiple" size="5" >
-									{% for filterFileType in aFilterFileTypes %}
-										{% autoescape off %}
-										<option value="{{ filterFileType.getValue }}" {% if filterFileType.isSelected %}selected="selected"{% endif %}>{{ filterFileType.getText }}</option>
-										{% endautoescape %}
-									{% endfor %}
-									</select>
-								</li>
-								<li>
-									<!-- Online servers filter -->
-									<input id="os" name="os" {% if isOnlineSelected %}checked="checked"{% endif %} type="checkbox" value="1" />
-									<label for="os">Serveurs online seulement</label>
-								</li>
-							</ul>
-						</div>
-					</div>
-					<div id="servers" class="pane">
-						{% include "online.html" %}
-					</div>
-				    <div class="pane">
-				    	<a href="#" class="plus_sign">-</a>
-						<div class="advanced_pane">
-							<hr />
-							Trop la chance !
-						</div>
-					</div>
-				</div>
-			</div>
-		</form>
-	</div>
-	{% include "search_results.html" %}
-	<div id="footer">
-		<p>FTPVista 3.0 by Magne &amp; Mc2</p>
-	</div>
+            // Refresh server statuses in ajax
+            var checkservers = function(){
+                $.post(
+                    "{% url 'online' %}",
+                    function(data){
+                        $("#servers").html(data);
+                    }
+                );
+                setTimeout(checkservers, 120000); //every 2 minutes
+            };
+            setTimeout(checkservers, 120000); //every 2 minutes
+        });
+    </script>
+    <div id="header">
+        <h1>FTPVista</h1>
+    </div>
+    <div id="summary"><span>{{ nb_files }} fichiers - Total : {{ files_size|filesizeformat2 }}</span></div>
+    <div id="search">
+            <form method="get" action="{% url 'search' %}">
+            <div id="tabs">
+                <!-- the tabs -->
+                <ul class="tabs">
+                    <li><a id="t1" href="#search">Recherche</a></li>
+                    <li><a id="t2" href="#server-list">Liste des serveurs</a></li>
+                    <li><a id="t3" href="#last">Afficher les derniers fichiers</a></li>
+                </ul>
+                
+                <!-- tab "panes" -->
+                <div class="panes">
+                    <div class="pane">
+                        <p>
+                            <input type="text" id="s" name="s" value="{{ query }}" />
+                            <input type="submit" value="Rechercher" />
+                        </p>
+                        
+                        <a href="#" class="plus_sign">- Filtres</a>
+                        <div class="advanced_pane">
+                            <hr />
+                            <ul>
+                                <li>
+                                    <!-- File type filter -->
+                                    <label for="ft">Type de fichiers</label>
+                                    <select id="ft" name="ft" multiple="multiple" size="5" >
+                                    {% for filterFileType in aFilterFileTypes %}
+                                        {% autoescape off %}
+                                        <option value="{{ filterFileType.getValue }}" {% if filterFileType.isSelected %}selected="selected"{% endif %}>{{ filterFileType.getText }}</option>
+                                        {% endautoescape %}
+                                    {% endfor %}
+                                    </select>
+                                </li>
+                                <li>
+                                    <!-- Online servers filter -->
+                                    <input id="os" name="os" {% if isOnlineSelected %}checked="checked"{% endif %} type="checkbox" value="1" />
+                                    <label for="os">Serveurs online seulement</label>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div id="servers" class="pane">
+                        {% include "online.html" %}
+                    </div>
+                    <div class="pane">
+                        <a href="#" class="plus_sign">-</a>
+                        <div class="advanced_pane">
+                            <hr />
+                            Trop la chance !
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+    {% include "search_results.html" %}
+    <div id="footer">
+        <p>FTPVista 3.0 by Magne &amp; Mc2</p>
+    </div>
 </body>
 </html>
