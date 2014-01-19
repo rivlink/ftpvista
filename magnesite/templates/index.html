@@ -7,24 +7,23 @@
     <title>FTPVista 3.0</title>
     
         <link rel="search" type="application/opensearchdescription+xml" title="ftpvista" href="{% url 'static' 'resources/search_engine.xml' %}" />
-        <link href="{% url 'static' 'css/global.css' %}" type="text/css" rel="stylesheet"></script>
-        <link href="{% url 'static' 'css/tabs.css' %}" type="text/css" rel="stylesheet"></script>
-        <link href="{% url 'static' 'css/jquery.treetable.css' %}" type="text/css" rel="stylesheet"></script>
-        <link href="{% url 'static' 'css/jquery.multiSelect.css' %}" type="text/css" rel="stylesheet"></script>
-        <script src="{% url 'static' 'js/jquery.tools.min.js' %}" type="text/javascript"></script>
-        <script src="{% url 'static' 'js/jquery.treetable.min.js' %}" type="text/javascript"></script>
-        <script src="{% url 'static' 'js/jquery.bgiframe.min.js' %}" type="text/javascript"></script>
-        <script src="{% url 'static' 'js/jquery.multiSelect.js' %}" type="text/javascript"></script>
+        <link href="{% url 'static' 'css/jquery.treetable.css' %}" type="text/css" rel="stylesheet" />
+        <link href="{% url 'static' 'css/jquery.multiselect.css' %}" type="text/css" rel="stylesheet" />
+        <link href="{% url 'static' 'css/jquery-ui-1.10.4.custom.css' %}" type="text/css" rel="stylesheet" />
+        <link href="{% url 'static' 'css/global.css' %}" type="text/css" rel="stylesheet" />
+        <script src="{% url 'static' 'js/jquery-1.10.2.min.js' %}" type="text/javascript"></script>
+        <script src="{% url 'static' 'js/jquery-ui-1.10.4.custom.min.js' %}" type="text/javascript"></script>
+        <script src="{% url 'static' 'js/jquery.multiselect.min.js' %}" type="text/javascript"></script>
 </head>
 <body>
     <script type="text/javascript">
         function addSearchProvider(){
-            window.external.AddSearchProvider('/{% url "static" "resources/search_engine.xml" %}');
+            window.external.AddSearchProvider('{% url "static" "resources/search_engine.xml" %}');
         };
         
         $(document).ready(function() {
-            //Create tabs, with history support 
-            $("ul.tabs").tabs("div.panes > div", {history: true});
+            //Create tabs
+            $("#tabs").tabs();
 
             //Show/hide advanced option pane in each tab
             $(".plus_sign").click(function(){
@@ -45,17 +44,6 @@
                 }
             }
             
-            //TreeTable
-            /*
-            $("#browser").treeTable({
-                  expandable: true,
-                  childPrefix: "child-of-",
-                  clickableNodeNames: false,
-                  indent: 19,
-                  initialState: "collapsed"
-            });
-            */
-
             // Make visible a clicked row
             $("#browser tbody tr").mousedown(function() {
                 $("tr.selected").removeClass("selected"); // Deselect currently selected rows
@@ -68,10 +56,12 @@
             });
 
             //Custom Multiselect
-            $("#ft").multiSelect({
-                oneOrMoreSelected: '*',
-                selectAllText: 'Tous',
-                noneSelected: 'Sélectionner des options'
+            $("#ft").multiselect({
+                checkAllText: 'Tous',
+                uncheckAllText: 'Aucun',
+                noneSelectedText: 'Tous les fichiers',
+                selectedList: 5,
+                minWidth: 380
             });
 
             // Refresh server statuses in ajax
@@ -102,45 +92,43 @@
                 </ul>
                 
                 <!-- tab "panes" -->
-                <div class="panes">
-                    <div class="pane">
-                        <p>
-                            <input type="text" id="s" name="s" value="{{ query }}" />
-                            <input type="submit" value="Rechercher" />
-                        </p>
-                        
-                        <a href="#" class="plus_sign">- Filtres</a>
-                        <div class="advanced_pane">
-                            <hr />
-                            <ul>
-                                <li>
-                                    <!-- File type filter -->
-                                    <label for="ft">Type de fichiers</label>
-                                    <select id="ft" name="ft" multiple="multiple" size="5" >
-                                    {% for filterFileType in aFilterFileTypes %}
-                                        {% autoescape off %}
-                                        <option value="{{ filterFileType.getValue }}" {% if filterFileType.isSelected %}selected="selected"{% endif %}>{{ filterFileType.getText }}</option>
-                                        {% endautoescape %}
-                                    {% endfor %}
-                                    </select>
-                                </li>
-                                <li>
-                                    <!-- Online servers filter -->
-                                    <input id="os" name="os" {% if isOnlineSelected %}checked="checked"{% endif %} type="checkbox" value="1" />
-                                    <label for="os">Serveurs online seulement</label>
-                                </li>
-                            </ul>
-                        </div>
+                <div id="search" class="pane">
+                    <p>
+                        <input type="text" id="s" name="s" value="{{ query }}" />
+                        <input type="submit" value="Rechercher" />
+                    </p>
+                    
+                    <a href="#" class="plus_sign">- Filtres</a>
+                    <div class="advanced_pane">
+                        <hr />
+                        <ul>
+                            <li>
+                                <!-- File type filter -->
+                                <label for="ft">Type de fichiers</label>
+                                <select id="ft" name="ft" multiple="multiple" size="5" >
+                                {% for filterFileType in aFilterFileTypes %}
+                                    {% autoescape off %}
+                                    <option value="{{ filterFileType.getValue }}" {% if filterFileType.isSelected %}selected="selected"{% endif %}>{{ filterFileType.getText }}</option>
+                                    {% endautoescape %}
+                                {% endfor %}
+                                </select>
+                            </li>
+                            <li>
+                                <!-- Online servers filter -->
+                                <input id="os" name="os" {% if isOnlineSelected %}checked="checked"{% endif %} type="checkbox" value="1" />
+                                <label for="os">Serveurs online seulement</label>
+                            </li>
+                        </ul>
                     </div>
-                    <div id="servers" class="pane">
-                        {% include "online.html" %}
-                    </div>
-                    <div class="pane">
-                        <a href="#" class="plus_sign">-</a>
-                        <div class="advanced_pane">
-                            <hr />
-                            Trop la chance !
-                        </div>
+                </div>
+                <div id="server-list" class="pane">
+                    {% include "online.html" %}
+                </div>
+                <div id="last" class="pane">
+                    <a href="#" class="plus_sign">-</a>
+                    <div class="advanced_pane">
+                        <hr />
+                        Trop la chance !
                     </div>
                 </div>
             </div>
