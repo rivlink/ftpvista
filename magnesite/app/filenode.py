@@ -1,5 +1,4 @@
 import const as c
-from search_filter import SearchFilterFileTypes
 from utils import Servers
 from os import path
 
@@ -21,8 +20,8 @@ class FileNode:
         self.sDate = sDate
         self.sSize = sSize
         self.bIsOnline = bIsOnline
-        self.bAudio = False;
-        FileNode.correspondences = None;
+        self.bAudio = False
+        FileNode.correspondences = None
     
     def getDate(self):
         return self.sDate
@@ -66,20 +65,12 @@ class FileNode:
         return self.bAudio
     
     def getSpanClass(self):
-        const = SearchFilterFileTypes.getFileType(self.sFilename)
-        
-        if const == c.OTHERS:
-            return c.SPAN_CLASS_OTHERS
-        elif const == c.VIDEOS:
-            return c.SPAN_CLASS_VIDEOS
-        elif const == c.AUDIOS:
-            return c.SPAN_CLASS_AUDIOS
-        elif const == c.IMAGES:
-            return c.SPAN_CLASS_IMAGES
-        elif const == c.ARCHIVES:
-            return c.SPAN_CLASS_ARCHIVES
-        elif const == c.DISKIMAGES:
-            return c.SPAN_CLASS_DISKIMAGES
+        root, ext = path.splitext(self.sFilename)
+        lext = ext.lower()
+        for key, currentext in c.EXT.iteritems():
+            if lext in currentext:
+                return c.SPAN_CLASS[key]
+        return c.SPAN_CLASS[str(c.OTHERS)]
 
 class AudioFileNode(FileNode):
     """

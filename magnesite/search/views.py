@@ -5,26 +5,22 @@ from django.http import HttpResponse
 from django.template import Context, loader
 from django.shortcuts import render_to_response
 from magnesite.search import models
-from app.search_filter import SearchFilterFileTypes
-
+from app.forms import SearchForm
 import app.const as c
 import re
-
-def filter_movie(hit):
-    return filter_video(hit) and hit['size'] > 400 * 1024**2
 
 def construction(request):
     return render_to_response('construction.html')
 
 def index(request):
     base_url = request.build_absolute_uri('/')[:-1]
+    form = SearchForm({'os':True})
     return render_to_response('index.html', {'base_url': base_url,
                                              'sTrId': u'node-',
                                              'servers': models.get_servers(),
-                                             'aFilterFileTypes': SearchFilterFileTypes.getFileTypes([str(c.VIDEOS), str(c.AUDIOS), str(c.IMAGES), str(c.ARCHIVES), str(c.DISKIMAGES)]),
-                                             'isOnlineSelected': True,
                                              'nb_files': models.get_nb_files(),
-                                             'files_size': models.get_files_size()})
+                                             'files_size': models.get_files_size(),
+                                             'form': form})
 
 
 def get_all_extensions(filter_list):
@@ -38,24 +34,25 @@ def search(request):
     online_seulement = request.GET.has_key('os')
     filter_list = request.GET.getlist('ft')
     fileNodes = list()
+    form = None
     
     if query:
         fileNodes = list(models.search(query, online=online_seulement, exts=get_all_extensions(filter_list)))
+        form = SearchForm(request.GET)
     else:
         # Default values
         query = ""
         online_seulement = 1
-        filter_list = [str(c.VIDEOS), str(c.AUDIOS), str(c.IMAGES), str(c.ARCHIVES), str(c.DISKIMAGES)]
-    
+        form = SearchForm({'os':True})
+
     return render_to_response('index.html', {'base_url': base_url,
                                              'query' : query,
                                              'aFileNodes': fileNodes,
                                              'sTrId': u'node-',
                                              'servers': models.get_servers(),
-                                             'aFilterFileTypes': SearchFilterFileTypes.getFileTypes(filter_list),
-                                             'isOnlineSelected': online_seulement,
                                              'nb_files': models.get_nb_files(),
-                                             'files_size': models.get_files_size()})
+                                             'files_size': models.get_files_size(),
+                                             'form': form})
 
 
 def search_results(request):

@@ -56,7 +56,7 @@
             });
 
             //Custom Multiselect
-            $("#ft").multiselect({
+            $(".ft").multiselect({
                 checkAllText: 'Tous',
                 uncheckAllText: 'Aucun',
                 noneSelectedText: 'Tous les fichiers',
@@ -102,24 +102,8 @@
                     <a href="#" class="plus_sign">- Filtres</a>
                     <div class="advanced_pane">
                         <hr/>
-                        <ul>
-                            <li>
-                                <!-- File type filter -->
-                                <label for="ft">Type de fichiers</label>
-                                <select id="ft" name="ft" multiple="multiple" size="5" >
-                                {% for filterFileType in aFilterFileTypes %}
-                                    {% autoescape off %}
-                                    <option value="{{ filterFileType.getValue }}" {% if filterFileType.isSelected %}selected="selected"{% endif %}>{{ filterFileType.getText }}</option>
-                                    {% endautoescape %}
-                                {% endfor %}
-                                </select>
-                            </li>
-                            <li>
-                                <!-- Online servers filter -->
-                                <input id="os" name="os" {% if isOnlineSelected %}checked="checked"{% endif %} type="checkbox" value="1" />
-                                <label for="os">Serveurs online seulement</label>
-                            </li>
-                        </ul>
+                        {{ form.ft.label_tag }} {{ form.ft }}<br/>
+                        {{ form.os }} {{ form.os.label_tag }}
                     </div>
                 </div>
                 <div id="server-list" class="pane">
@@ -128,8 +112,14 @@
                 <div id="last" class="pane">
                     <a href="#" class="plus_sign">-</a>
                     <div class="advanced_pane">
-                        <hr/>
-                        Trop la chance !
+                        <select id="ft2" name="ft2" multiple="multiple" size="5" class="ft">
+                        {% for filterFileType2 in aFilterFileTypes2 %}
+                            {% autoescape off %}
+                            <option value="{{ filterFileType2.getValue }}" {% if filterFileType2.isSelected %}selected="selected"{% endif %}>{{ filterFileType2.getText }}</option>
+                            {% endautoescape %}
+                        {% endfor %}
+                        </select>
+                        <input type="submit" value="Rechercher" />
                     </div>
                 </div>
             </div>

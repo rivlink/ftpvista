@@ -5,19 +5,16 @@ IMAGES = 3
 ARCHIVES = 4
 DISKIMAGES = 5
 
-"""
-    Classes
-"""
-SPAN_CLASS_OTHERS = u"file"
-SPAN_CLASS_VIDEOS = u"video"
-SPAN_CLASS_AUDIOS = u"music"
-SPAN_CLASS_IMAGES = u"image"
-SPAN_CLASS_ARCHIVES = u"archive"
-SPAN_CLASS_DISKIMAGES = u"diskimage"
+# Classes
+SPAN_CLASS = {}
+SPAN_CLASS[str(OTHERS)] = u"file"
+SPAN_CLASS[str(VIDEOS)] = u"video"
+SPAN_CLASS[str(AUDIOS)] = u"music"
+SPAN_CLASS[str(IMAGES)] = u"image"
+SPAN_CLASS[str(ARCHIVES)] = u"archive"
+SPAN_CLASS[str(DISKIMAGES)] = u"diskimage"
 
-"""
-    Extensions regex
-"""
+# Extensions categories
 EXT = {}
 EXT[str(VIDEOS)] = [u'avi', u'mpg', u'mkv', u'wmv', u'mp4', u'mov', u'3gp', u'3gp2', u'mpeg', u'mpg', u'mpg2', u'ogm']
 EXT[str(AUDIOS)] = [u'mp3', u'wma', u'cda', u'ogg', u'flac', u'aac', u'aiff', u'm4a', u'wav']
