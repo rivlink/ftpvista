@@ -46,13 +46,13 @@
             
             // Make visible a clicked row
             $("#browser tbody tr").mousedown(function() {
-                $("tr.selected").removeClass("selected"); // Deselect currently selected rows
-                $(this).addClass("selected");
+                $("tr.ui-state-highlight").removeClass("ui-state-highlight"); // Deselect currently selected rows
+                $(this).addClass("ui-state-highlight");
             });
 
             // Make sure row is selected when span is clicked
             $("#browser tbody tr span").mousedown(function() {
-                $($(this).parents("tr")[0]).trigger("mousedown");
+                $(this).parents("tr:first").trigger("mousedown");
             });
 
             //Custom Multiselect
@@ -61,6 +61,7 @@
                 uncheckAllText: 'Aucun',
                 noneSelectedText: 'Tous les fichiers',
                 selectedList: 5,
+                height: 'auto',
                 minWidth: 380
             });
 
@@ -69,7 +70,7 @@
                 $.post(
                     "{% url 'online' %}",
                     function(data){
-                        $("#servers").html(data);
+                        $("#server-list").html(data);
                     }
                 );
                 setTimeout(checkservers, 120000); //every 2 minutes
@@ -100,7 +101,7 @@
                     
                     <a href="#" class="plus_sign">- Filtres</a>
                     <div class="advanced_pane">
-                        <hr />
+                        <hr/>
                         <ul>
                             <li>
                                 <!-- File type filter -->
@@ -127,7 +128,7 @@
                 <div id="last" class="pane">
                     <a href="#" class="plus_sign">-</a>
                     <div class="advanced_pane">
-                        <hr />
+                        <hr/>
                         Trop la chance !
                     </div>
                 </div>

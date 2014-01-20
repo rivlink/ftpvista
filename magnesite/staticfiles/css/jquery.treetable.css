@@ -47,10 +47,10 @@
 }
 
 .treeTable {
-	border-spacing: 0px;
-	border-collapse: collapse;
-	border: 1px solid #666666;
-	width: 100%;
+  border-spacing: 0px;
+  border-collapse: collapse;
+  border: 1px solid #666666;
+  width: 100%;
 }
 
 .treeTable thead {
@@ -65,9 +65,6 @@
   padding: .3em 1.5em;
   text-align: left;
   font-size: 13px;
-}
-.treeTable tbody tr{
-	background-color: #595959;
 }
 
 .treeTable tbody tr td {

@@ -1,27 +1,29 @@
-	<div id="search_result">
-		<p>
-			{{ aFileNodes|length }} résultat(s) trouvé(s)
-		</p>
-		<table id="browser" class="treeTable">
-		  <thead>
-		    <tr>
-		      <th>Nom du fichier</th>
-		      <th>Serveur</th>
-		      <th>Taille</th>
-		      <th>Date de création</th>
-		    </tr>
-		  </thead>
-			{% if aFileNodes %}
-				{% for fileNode in aFileNodes %}
-				{% autoescape off %}
-					<tr id="{{ sTrId }}{{ forloop.counter }}" class="child-of-{{ sTrId }}{{ forloop.counter }}">
-						<td><span class="{{ fileNode.getSpanClass }}"><a href="{{ fileNode.getEscapedURL }}">{{ fileNode.getSpan }}</a></span></td>
-						<td><a href="{{ fileNode.getFolderURL }}">{{ fileNode.getServer }}</a></td>
-						<td>{{ fileNode.getSize|filesizeformat }}</td>
-						<td>{{ fileNode.getDate }}</td>
-					</tr>
-				{% endautoescape %}
-				{% endfor %}
-			{% endif %}
-		</table>
-	</div>
+    <div id="search_result">
+        <p>
+            {{ aFileNodes|length }} résultat(s) trouvé(s)
+        </p>
+        <table id="browser" class="treeTable ui-widget ui-widget-content ui-corner-all">
+          <thead class="ui-widget-header ui-helper-reset ui-helper-clearfix">
+            <tr>
+              <th class="ui-state-default">Nom du fichier</th>
+              <th class="ui-state-default">Serveur</th>
+              <th class="ui-state-default">Taille</th>
+              <th class="ui-state-default">Date de création</th>
+            </tr>
+          </thead>
+          <tbody class="ui-widget-content ui-helper-reset ui-helper-clearfix">
+            {% if aFileNodes %}
+                {% for fileNode in aFileNodes %}
+                {% autoescape off %}
+                    <tr id="{{ sTrId }}{{ forloop.counter }}" class="child-of-{{ sTrId }}{{ forloop.counter }}">
+                        <td><span class="{{ fileNode.getSpanClass }}"><a href="{{ fileNode.getEscapedURL }}">{{ fileNode.getSpan }}</a></span></td>
+                        <td><a href="{{ fileNode.getFolderURL }}">{{ fileNode.getServer }}</a></td>
+                        <td>{{ fileNode.getSize|filesizeformat }}</td>
+                        <td>{{ fileNode.getDate }}</td>
+                    </tr>
+                {% endautoescape %}
+                {% endfor %}
+            {% endif %}
+          </tbody>
+        </table>
+    </div>
