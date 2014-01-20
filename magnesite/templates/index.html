@@ -83,7 +83,6 @@
     </div>
     <div id="summary"><span>{{ nb_files }} fichiers - Total : {{ files_size|filesizeformat2 }}</span></div>
     <div id="search">
-            <form method="get" action="{% url 'search' %}">
             <div id="tabs">
                 <!-- the tabs -->
                 <ul class="tabs">
@@ -94,36 +93,30 @@
                 
                 <!-- tab "panes" -->
                 <div id="search" class="pane">
-                    <p>
-                        <input type="text" id="s" name="s" value="{{ query }}" />
-                        <input type="submit" value="Rechercher" />
-                    </p>
-                    
-                    <a href="#" class="plus_sign">- Filtres</a>
-                    <div class="advanced_pane">
-                        <hr/>
-                        {{ form.ft.label_tag }} {{ form.ft }}<br/>
-                        {{ form.os }} {{ form.os.label_tag }}
-                    </div>
+                    <form method="get" action="{% url 'search' %}">
+                        <p>
+                            {{ form.s }}
+                            <input type="submit" value="Rechercher" />
+                        </p>
+                        
+                        <a href="#" class="plus_sign">- Filtres</a>
+                        <div class="advanced_pane">
+                            <hr/>
+                            {{ form.ft.label_tag }} {{ form.ft }}<br/>
+                            {{ form.os }} {{ form.os.label_tag }}
+                        </div>
+                    </form>
                 </div>
                 <div id="server-list" class="pane">
                     {% include "online.html" %}
                 </div>
                 <div id="last" class="pane">
-                    <a href="#" class="plus_sign">-</a>
-                    <div class="advanced_pane">
-                        <select id="ft2" name="ft2" multiple="multiple" size="5" class="ft">
-                        {% for filterFileType2 in aFilterFileTypes2 %}
-                            {% autoescape off %}
-                            <option value="{{ filterFileType2.getValue }}" {% if filterFileType2.isSelected %}selected="selected"{% endif %}>{{ filterFileType2.getText }}</option>
-                            {% endautoescape %}
-                        {% endfor %}
-                        </select>
+                    <form method="get" action="{% url 'last' %}">
+                        {{ lastform.ft.label_tag }} {{ lastform.ft }}
                         <input type="submit" value="Rechercher" />
-                    </div>
+                    </form>
                 </div>
             </div>
-        </form>
     </div>
     {% include "search_results.html" %}
     <div id="footer">

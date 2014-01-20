@@ -6,9 +6,9 @@ from django.db import models
 from django.conf import settings
 
 sys.path.append(path.abspath(path.dirname(__file__)+'/../../ftpvista/'))
-from whoosh import index as whoosh_index
+from whoosh import index as whoosh_index, sorting
 from whoosh.qparser import *
-from whoosh.query import Regex,Or,And,Term
+from whoosh.query import Regex, Or, And, Term, Every
 
 from datetime import datetime, timedelta
 
@@ -20,7 +20,7 @@ from persist import FTPVistaPersist
 persist = FTPVistaPersist(settings.PERSIST_DB)
 
 
-def search(query, online=False, exts=None, pagenum=1, pagelen=1000):
+def search(query, online=False, exts=None, pagenum=1, pagelen=1000, sortbytime=False):
     index = whoosh_index.open_dir(settings.WHOOSH_IDX)
     is_online_cache = {}
     searchfilter = None
@@ -69,15 +69,21 @@ def search(query, online=False, exts=None, pagenum=1, pagelen=1000):
         for extension in exts:
             extensionfilter.append(Term("ext", extension))
         if searchfilter is not None:
-            searchfilter = searchfilter & Or(extensionfilter)
+            searchfilter = And([searchfilter, Or(extensionfilter)])
         else:
             searchfilter = Or(extensionfilter)
     
-    finalquery = parser.parse(query)
-    if searchfilter is not None:
-        finalquery = finalquery & searchfilter
-    
-    results = searcher.search_page(finalquery, pagenum, pagelen=pagelen)
+    finalquery = Every()
+    if query is not None:
+        finalquery = parser.parse(query)
+    if searchfilter is not None and len(searchfilter) > 0:
+        finalquery = And([finalquery, searchfilter])
+
+    if sortbytime:
+        facet = sorting.FieldFacet("mtime", reverse=True)
+        results = searcher.search_page(finalquery, pagenum, pagelen=pagelen, sortedby=facet)
+    else:
+        results = searcher.search_page(finalquery, pagenum, pagelen=pagelen)
     
     for result in results:
         server_id = int(result['server_id'])

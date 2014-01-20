@@ -5,7 +5,7 @@ from django.http import HttpResponse
 from django.template import Context, loader
 from django.shortcuts import render_to_response
 from magnesite.search import models
-from app.forms import SearchForm
+from app.forms import LastForm, SearchForm
 import app.const as c
 import re
 
@@ -15,12 +15,14 @@ def construction(request):
 def index(request):
     base_url = request.build_absolute_uri('/')[:-1]
     form = SearchForm({'os':True})
+    lastform = LastForm()
     return render_to_response('index.html', {'base_url': base_url,
                                              'sTrId': u'node-',
                                              'servers': models.get_servers(),
                                              'nb_files': models.get_nb_files(),
                                              'files_size': models.get_files_size(),
-                                             'form': form})
+                                             'form': form,
+                                             'lastform': lastform})
 
 
 def get_all_extensions(filter_list):
@@ -35,6 +37,7 @@ def search(request):
     filter_list = request.GET.getlist('ft')
     fileNodes = list()
     form = None
+    lastform = LastForm()
     
     if query:
         fileNodes = list(models.search(query, online=online_seulement, exts=get_all_extensions(filter_list)))
@@ -52,7 +55,26 @@ def search(request):
                                              'servers': models.get_servers(),
                                              'nb_files': models.get_nb_files(),
                                              'files_size': models.get_files_size(),
-                                             'form': form})
+                                             'form': form,
+                                             'lastform': lastform})
+
+def last(request):
+    base_url = request.build_absolute_uri('/')[:-1]
+    filter_list = request.GET.getlist('ft')
+    fileNodes = list()
+    form = SearchForm({'os':True})
+    lastform = LastForm(request.GET)
+
+    fileNodes = list(models.search(None, exts=get_all_extensions(filter_list), sortbytime=True))
+    
+    return render_to_response('index.html', {'base_url': base_url,
+                                             'aFileNodes': fileNodes,
+                                             'sTrId': u'node-',
+                                             'servers': models.get_servers(),
+                                             'nb_files': models.get_nb_files(),
+                                             'files_size': models.get_files_size(),
+                                             'form': form,
+                                             'lastform': lastform})
 
 
 def search_results(request):

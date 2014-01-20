@@ -1,8 +1,7 @@
 from django import forms
 import app.const as c
 
-class SearchForm(forms.Form):
-    s = forms.CharField(max_length=100)
+class LastForm(forms.Form):
     ft = forms.MultipleChoiceField(choices=(
         (c.VIDEOS, u'Videos'),
         (c.AUDIOS, u'Audios'),
@@ -10,5 +9,8 @@ class SearchForm(forms.Form):
         (c.ARCHIVES, u'Archives'),
         (c.DISKIMAGES, u'Images disques')
     ), label=u'Type de fichiers', widget=forms.SelectMultiple(attrs={'class':'ft'}))
+
+class SearchForm(LastForm):
+    s = forms.CharField(max_length=100)
     os = forms.BooleanField(label=u'Serveurs online seulement')
 
