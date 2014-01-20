@@ -66,9 +66,9 @@ class FileNode:
     
     def getSpanClass(self):
         root, ext = path.splitext(self.sFilename)
-        lext = ext.lower()
-        for key, currentext in c.EXT.iteritems():
-            if lext in currentext:
+        lext = ext[1:].lower()
+        for key in c.EXT:
+            if lext in c.EXT[key]:
                 return c.SPAN_CLASS[key]
         return c.SPAN_CLASS[str(c.OTHERS)]
 
