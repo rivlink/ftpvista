@@ -57,3 +57,7 @@ a:hover{
     border: 0 !important;
     text-shadow: 0.1em 0.1em 0.2em black;
 }
+
+#browser.ui-widget-content{
+    background-image: none !important;
+}
