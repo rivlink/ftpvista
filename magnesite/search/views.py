@@ -17,7 +17,9 @@ def construction(request):
     return render_to_response('construction.html')
 
 def index(request):
-    return render_to_response('index.html', {'sTrId': u'node-',
+    base_url = request.build_absolute_uri('/')[:-1]
+    return render_to_response('index.html', {'base_url': base_url,
+                                             'sTrId': u'node-',
                                              'servers': models.get_servers(),
                                              'aFilterFileTypes': SearchFilterFileTypes.getFileTypes([str(c.VIDEOS), str(c.AUDIOS), str(c.IMAGES), str(c.ARCHIVES), str(c.DISKIMAGES)]),
                                              'isOnlineSelected': True,
@@ -31,6 +33,7 @@ def get_all_extensions(filter_list):
             yield ext
 
 def search(request):
+    base_url = request.build_absolute_uri('/')[:-1]
     query = request.GET.get('s', None)
     online_seulement = request.GET.has_key('os')
     filter_list = request.GET.getlist('ft')
@@ -44,7 +47,8 @@ def search(request):
         online_seulement = 1
         filter_list = [str(c.VIDEOS), str(c.AUDIOS), str(c.IMAGES), str(c.ARCHIVES), str(c.DISKIMAGES)]
     
-    return render_to_response('index.html', {'query' : query,
+    return render_to_response('index.html', {'base_url': base_url,
+                                             'query' : query,
                                              'aFileNodes': fileNodes,
                                              'sTrId': u'node-',
                                              'servers': models.get_servers(),

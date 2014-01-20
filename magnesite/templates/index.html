@@ -6,7 +6,7 @@
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
     <title>FTPVista 3.0</title>
     
-        <link rel="search" type="application/opensearchdescription+xml" title="ftpvista" href="{% url 'static' 'resources/search_engine.xml' %}" />
+    <link rel="search" type="application/opensearchdescription+xml" title="ftpvista" href="{{ base_url }}{% url 'static' 'resources/search_engine.xml' %}" />
         <link href="{% url 'static' 'css/jquery.treetable.css' %}" type="text/css" rel="stylesheet" />
         <link href="{% url 'static' 'css/jquery.multiselect.css' %}" type="text/css" rel="stylesheet" />
         <link href="{% url 'static' 'css/jquery-ui-1.10.4.custom.css' %}" type="text/css" rel="stylesheet" />
@@ -18,7 +18,7 @@
 <body>
     <script type="text/javascript">
         function addSearchProvider(){
-            window.external.AddSearchProvider('{% url "static" "resources/search_engine.xml" %}');
+            window.external.AddSearchProvider('{{ base_url }}{% url "static" "resources/search_engine.xml" %}');
         };
         
         $(document).ready(function() {
@@ -62,7 +62,7 @@
                 noneSelectedText: 'Tous les fichiers',
                 selectedList: 5,
                 height: 'auto',
-                minWidth: 380
+                minWidth: 345
             });
 
             // Refresh server statuses in ajax
