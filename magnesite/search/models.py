@@ -8,7 +8,7 @@ from django.conf import settings
 sys.path.append(path.abspath(path.dirname(__file__)+'/../../ftpvista/'))
 from whoosh import index as whoosh_index, sorting
 from whoosh.qparser import *
-from whoosh.query import Regex, Or, And, Term
+from whoosh.query import Regex, Or, And, Term, NullQuery
 
 from datetime import datetime, timedelta
 
@@ -63,6 +63,8 @@ def search(query, online=False, exts=None, pagenum=1, pagelen=1000, sortbytime=F
                 online_servers_id.append(Term("server_id", server.get_server_id()))
         if len(online_servers_id) > 0:
             searchfilter = Or(online_servers_id)
+        else:
+            searchfilter = NullQuery()
 
     if exts is not None:
         extensionfilter = []
