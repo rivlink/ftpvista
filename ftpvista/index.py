@@ -40,13 +40,18 @@ class Index (object):
             self._idx = index.open_dir(dir)
 
         self._searcher = self._idx.searcher()
-        self._writer = BufferedWriter(self._idx, 120, 4000)
+        #self._writer = BufferedWriter(self._idx, 120, 4000)
+        self.open_writer()
         self._last_optimization = None
+
+    def open_writer(self):
+        self._writer = AsyncWriter(self._idx)
 
     def get_schema(self):
         analyzer = StemmingAnalyzer('([a-zA-Z0-9])+')
         my_analyzer = analyzer | CharsetFilter(accent_map)
         return Schema(server_id=ID(stored=True),
+                      has_id=ID(),
                       path=TEXT(analyzer=my_analyzer, stored=True),
                       name=TEXT(analyzer=my_analyzer, stored=True),
                       ext=TEXT(analyzer=my_analyzer, stored=True),
@@ -63,7 +68,7 @@ class Index (object):
                       )
     
     def delete_all_docs(self, server):
-        writer = AsyncWriter(self._idx,)
+        self.open_writer()
         writer.delete_by_term('server_id', to_unicode(server.get_server_id()))
         writer.commit()
         self.log.info('All documents of server %s deleted' % server.get_ip_addr())
@@ -132,14 +137,15 @@ class Index (object):
         # let's build a dict for that purpose
 
         _, ext = os.path.splitext(name)
-        ext = ext.lstrip('.')
+        ext = to_unicode(ext.lstrip('.'))
 
         kwargs = {'server_id' : server_id,
                   'name' : name,
                   'ext'  : ext,
                   'path' : path,
                   'size' : size,
-                  'mtime': mtime}
+                  'mtime': mtime,
+                  'has_id': u'a'}
 
         #add the optional args
         if audio_album is not None:
@@ -161,10 +167,10 @@ class Index (object):
         """ Commit the changes in the index and optimize it """
         self.log.info(' -- Begin of Commit -- ')
         self._writer.commit()
-        if self._last_optimization is None or self._last_optimization + 3600 < time():
-            self._idx.optimize()
-            self._last_optimization = time()
-        self.log.info('Index commited and optimized')
+        #if self._last_optimization is None or self._last_optimization + 3600 < time():
+        #    self._idx.optimize()
+        #    self._last_optimization = time()
+        self.log.info('Index commited')
         
         self._searcher = self._idx.searcher()
         self.log.info(' -- End of Commit -- ')
@@ -381,6 +387,8 @@ class IndexUpdateCoordinator(object):
 
         # Index the files
         pipeline = build_indexer_pipeline(server_id, server_addr, self._index, self._persist)
+        # Reopen writer
+        self._index.open_writer()
         for path, size, mtime in files:
             ctx = FileIndexerContext(path, size, mtime)
             pipeline.execute(ctx)

@@ -8,7 +8,7 @@ from django.conf import settings
 sys.path.append(path.abspath(path.dirname(__file__)+'/../../ftpvista/'))
 from whoosh import index as whoosh_index, sorting
 from whoosh.qparser import *
-from whoosh.query import Regex, Or, And, Term, Every
+from whoosh.query import Regex, Or, And, Term
 
 from datetime import datetime, timedelta
 
@@ -73,7 +73,7 @@ def search(query, online=False, exts=None, pagenum=1, pagelen=1000, sortbytime=F
         else:
             searchfilter = Or(extensionfilter)
     
-    finalquery = Every()
+    finalquery = Term("has_id", "a") # Quicker than Every Query. See doc.
     if query is not None:
         finalquery = parser.parse(query)
     if searchfilter is not None and len(searchfilter) > 0:
