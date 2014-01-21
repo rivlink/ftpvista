@@ -23,7 +23,23 @@
         
         $(document).ready(function() {
             //Create tabs
-            $("#tabs").tabs();
+            $("#tabs").tabs({
+                create: function (event, ui) {
+                    if (window.location.hash.length > 0){
+                        $(this).tabs("option", "active", $(this).find("ul.tabs li").index($(this).find('a[href="' + window.location.hash + '"]').parent()));
+                    }else if(window.location.pathname.indexOf('/last') > -1){
+                        $(this).tabs("option", "active", -1); //select last tab
+                    }
+                },
+                beforeActivate: function (event, ui) {
+                    window.location.hash = ui.newPanel.selector;
+                }
+            });
+
+            //Make the use of previous/next navigator buttons actually change active tab
+            $(window).on('hashchange', function(){
+                $('#tabs').tabs("option", "active", $('#tabs').find("ul.tabs li").index($('#tabs').find('a[href="' + window.location.hash + '"]').parent()));
+            });
 
             //Show/hide advanced option pane in each tab
             $(".plus_sign").click(function(){
