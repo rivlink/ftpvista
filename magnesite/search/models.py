@@ -70,10 +70,14 @@ def search(query, online=False, exts=None, pagenum=1, pagelen=100, sortbytime=Fa
         extensionfilter = []
         for extension in exts:
             extensionfilter.append(Term("ext", extension))
-        if searchfilter is not None:
-            searchfilter = And([searchfilter, Or(extensionfilter)])
-        else:
-            searchfilter = Or(extensionfilter)
+        if len(extensionfilter) > 0:
+            if searchfilter is not None:
+                searchfilter = And([searchfilter, Or(extensionfilter)])
+            else:
+                searchfilter = Or(extensionfilter)
+        elif searchfilter is None:
+            searchfilter = NullQuery()
+
     
     finalquery = Term("has_id", "a") # Quicker than Every Query. See doc.
     if query is not None:
