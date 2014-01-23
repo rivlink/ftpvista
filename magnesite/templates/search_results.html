@@ -1,8 +1,12 @@
-    <div id="search_result">
         <p>
-            {{ aFileNodes|length }} résultat(s) trouvé(s)
+        {% if query %}
+            Recherche : "{{ query }}" - 
+        {% else %}
+            Derniers fichiers ajoutés - 
+        {% endif %}
+        page {{ page }} <span>({{ aFileNodes|length }} résultat(s) affiché(s))</span>
         </p>
-        <table id="browser" class="treeTable ui-widget ui-widget-content ui-corner-all">
+        <table id="browser" class="treeTable ui-widget ui-widget-content ui-corner-all{% if is_last_page %} lastpage{% endif %}">
           <thead class="ui-widget-header ui-helper-reset ui-helper-clearfix">
             <tr>
               <th class="ui-state-default">Nom du fichier</th>
@@ -26,4 +30,3 @@
             {% endif %}
           </tbody>
         </table>
-    </div>

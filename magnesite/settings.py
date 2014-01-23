@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 # Django settings for mysite project.
 import os.path as path
+from django.conf import global_settings
 
 DEBUG = True
 TEMPLATE_DEBUG = DEBUG
@@ -86,6 +87,10 @@ STATIC_URL = 'static/'
 
 STATICFILES_DIRS = (
     path.join(PROJECT_DIR, 'staticfiles'),
+)
+
+TEMPLATE_CONTEXT_PROCESSORS = global_settings.TEMPLATE_CONTEXT_PROCESSORS + (
+    'django.core.context_processors.request',
 )
 
 INSTALLED_APPS = (

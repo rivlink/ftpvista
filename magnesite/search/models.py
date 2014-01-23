@@ -20,7 +20,7 @@ from persist import FTPVistaPersist
 persist = FTPVistaPersist(settings.PERSIST_DB)
 
 
-def search(query, online=False, exts=None, pagenum=1, pagelen=1000, sortbytime=False):
+def search(query, online=False, exts=None, pagenum=1, pagelen=100, sortbytime=False):
     index = whoosh_index.open_dir(settings.WHOOSH_IDX)
     is_online_cache = {}
     searchfilter = None
@@ -86,7 +86,8 @@ def search(query, online=False, exts=None, pagenum=1, pagelen=1000, sortbytime=F
         results = searcher.search_page(finalquery, pagenum, pagelen=pagelen, sortedby=facet)
     else:
         results = searcher.search_page(finalquery, pagenum, pagelen=pagelen)
-    
+
+
     for result in results:
         server_id = int(result['server_id'])
         server = persist.get_server(server_id)
@@ -116,6 +117,7 @@ def search(query, online=False, exts=None, pagenum=1, pagelen=1000, sortbytime=F
             yield AudioFileNode(server_ip, hit['url'], hit['name'], hit['mtime'], hit['size'], hit['is_online'], hit['audio_performer'], hit['audio_album'], hit['audio_title'], hit['audio_year'])
         else:
             yield FileNode(server_ip, hit['url'], hit['name'], hit['mtime'], hit['size'], hit['is_online'])
+    yield results.is_last_page()
 
 def get_nb_files():
     nb_files = 0

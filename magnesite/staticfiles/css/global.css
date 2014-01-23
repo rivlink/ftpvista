@@ -52,6 +52,15 @@ a:hover{
     color: white;
 }
 
+.results p{
+    text-align: center;
+}
+
+.results p span{
+    font-size: 0.8em;
+    opacity: 0.6;
+}
+
 #browser .ui-state-highlight{
     color: white !important;
     border: 0 !important;
@@ -60,4 +69,16 @@ a:hover{
 
 #browser.ui-widget-content{
     background-image: none !important;
+}
+
+.next{
+    float: right;
+}
+
+.prev{
+    float: left;
+}
+
+#footer{
+    margin-top: 60px;
 }
