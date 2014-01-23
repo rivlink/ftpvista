@@ -22,6 +22,7 @@ def index(request):
                                              'nb_files': models.get_nb_files(),
                                              'files_size': models.get_files_size(),
                                              'form': form,
+                                             'view': 'index',
                                              'lastform': lastform})
 
 
@@ -66,6 +67,7 @@ def search(request):
                                              'is_last_page': is_last_page,
                                              'form': form,
                                              'page': page,
+                                             'view': 'search',
                                              'lastform': lastform})
 
 def last(request):
@@ -93,6 +95,7 @@ def last(request):
                                              'is_last_page': is_last_page,
                                              'page': page,
                                              'form': form,
+                                             'view': last,
                                              'lastform': lastform})
 
 

@@ -66,21 +66,23 @@
             </div>
     </div>
     <div id="search_result">
-        {% if page > 1 %}
-            <a href="{% qurl request.get_full_path page=page|add:'-1' %}" class="prev">&#8592; page précédente</a>
-        {% endif %}
-        {% if not is_last_page %}
-            <a href="{% qurl request.get_full_path page=page|add:'1' %}" class="next">page suivante &#8594;</a>
-        {% endif %}
-        <div class="results">
-            {% include "search_results.html" %}
-        </div>
-        {% if page > 1 %}
-            <a href="{% qurl request.get_full_path page=page|add:'-1' %}" class="prev">&#8592; page précédente</a>
-        {% endif %}
-        {% if not is_last_page %}
-            <a href="{% qurl request.get_full_path page=page|add:'1' %}" class="next">page suivante &#8594;</a>
-        {% endif %}
+        {% ifnotequal view 'index' %}
+            {% if page > 1 %}
+                <a href="{% qurl request.get_full_path page=page|add:'-1' %}" class="prev">&#8592; page précédente</a>
+            {% endif %}
+            {% if not is_last_page and aFileNodes|length > 0 %}
+                <a href="{% qurl request.get_full_path page=page|add:'1' %}" class="next">page suivante &#8594;</a>
+            {% endif %}
+            <div class="results">
+                {% include "search_results.html" %}
+            </div>
+            {% if page > 1 %}
+                <a href="{% qurl request.get_full_path page=page|add:'-1' %}" class="prev">&#8592; page précédente</a>
+            {% endif %}
+            {% if not is_last_page and aFileNodes|length > 0 %}
+                <a href="{% qurl request.get_full_path page=page|add:'1' %}" class="next">page suivante &#8594;</a>
+            {% endif %}
+        {% endifnotequal %}
     </div>
     <div id="footer">
         <p>FTPVista 3.0 by Magne &amp; Mc2</p>

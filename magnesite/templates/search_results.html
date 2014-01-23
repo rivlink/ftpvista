@@ -1,10 +1,11 @@
+    {% if aFileNodes|length > 0 %}
         <p>
-        {% if query %}
-            Recherche : "{{ query }}" - 
-        {% else %}
-            Derniers fichiers ajoutés - 
-        {% endif %}
-        page {{ page }} <span>({{ aFileNodes|length }} résultat(s) affiché(s))</span>
+            {% if query %}
+                Recherche : "{{ query }}" - 
+            {% else %}
+                Derniers fichiers ajoutés - 
+            {% endif %}
+            page {{ page }} <span>({{ aFileNodes|length }} résultat(s) affiché(s))</span>
         </p>
         <table id="browser" class="treeTable ui-widget ui-widget-content ui-corner-all{% if is_last_page %} lastpage{% endif %}">
           <thead class="ui-widget-header ui-helper-reset ui-helper-clearfix">
@@ -29,4 +30,13 @@
                 {% endfor %}
             {% endif %}
           </tbody>
-        </table>
+      </table>
+    {% else %}
+    <p>
+        {% if query %}
+            Recherche : "{{ query }}" - pas de résultat
+        {% else %}
+            Pas de résultat
+        {% endif %}
+    </p>
+    {% endif %}
