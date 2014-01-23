@@ -14,8 +14,8 @@ from datetime import datetime, timedelta
 
 from app.filenode import *
 
-# Create your models here.
 from persist import FTPVistaPersist
+from utils import to_unicode
 
 persist = FTPVistaPersist(settings.PERSIST_DB)
 
@@ -60,7 +60,7 @@ def search(query, online=False, exts=None, pagenum=1, pagelen=100, sortbytime=Fa
         online_servers_id = []
         for server in persist.get_servers():
             if is_online(server):
-                online_servers_id.append(Term("server_id", server.get_server_id()))
+                online_servers_id.append(Term("server_id", to_unicode(server.get_server_id())))
         if len(online_servers_id) > 0:
             searchfilter = Or(online_servers_id)
         else:
@@ -82,7 +82,7 @@ def search(query, online=False, exts=None, pagenum=1, pagelen=100, sortbytime=Fa
     finalquery = Term("has_id", "a") # Quicker than Every Query. See doc.
     if query is not None:
         finalquery = parser.parse(query)
-    if searchfilter is not None and len(searchfilter) > 0:
+    if searchfilter is not None:
         finalquery = And([finalquery, searchfilter])
 
     if sortbytime:
