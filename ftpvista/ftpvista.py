@@ -42,9 +42,9 @@ def sniffer_task(queue, blacklist, valid_ip_pattern):
     sniffer.run()
 
 def clean_all(config):
+    clean_player(config)
     clean_db(config)
     clean_index(config)
-    clean_player(config)
     
 def clean_db(config):
     logging.basicConfig(level=logging.DEBUG,
