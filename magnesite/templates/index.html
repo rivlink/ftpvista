@@ -60,7 +60,8 @@
                 <div id="last" class="pane">
                     <form method="get" action="{% url 'last' %}">
                         {{ lastform.ft.label_tag }} {{ lastform.ft }}
-                        <input type="submit" value="Rechercher" />
+                        <input type="submit" value="Rechercher" /><br/>
+                        {{ form.os }} {{ form.os.label_tag }}
                     </form>
                 </div>
             </div>

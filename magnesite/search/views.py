@@ -72,6 +72,7 @@ def search(request):
 
 def last(request):
     base_url = request.build_absolute_uri('/')[:-1]
+    online_seulement = request.GET.has_key('os')
     filter_list = request.GET.getlist('ft')
     try:
         page = int(request.GET.get('page', 1))
@@ -83,7 +84,7 @@ def last(request):
     form = SearchForm({'os':True})
     lastform = LastForm(request.GET)
 
-    fileNodes = list(models.search(None, exts=get_all_extensions(filter_list), pagenum=page, sortbytime=True))
+    fileNodes = list(models.search(None, online=online_seulement, exts=get_all_extensions(filter_list), pagenum=page, sortbytime=True))
     is_last_page = fileNodes.pop() #last element contains a boolean indicating if this is the last page
     
     return render(request, 'index.html', {'base_url': base_url,
