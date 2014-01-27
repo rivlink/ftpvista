@@ -2,23 +2,18 @@
 import sys
 import logging
 import os.path as path
+sys.path.append(path.abspath(path.dirname(__file__)+'/../../ftpvista/'))
 from django.db import models
 from django.conf import settings
-
-sys.path.append(path.abspath(path.dirname(__file__)+'/../../ftpvista/'))
 from whoosh import index as whoosh_index, sorting
 from whoosh.qparser import *
 from whoosh.query import Regex, Or, And, Term, NullQuery
-
 from datetime import datetime, timedelta
-
 from app.filenode import *
-
 from persist import FTPVistaPersist
 from utils import to_unicode
 
 persist = FTPVistaPersist(settings.PERSIST_DB)
-
 
 def search(query, online=False, exts=None, pagenum=1, pagelen=100, sortbytime=False):
     index = whoosh_index.open_dir(settings.WHOOSH_IDX)
@@ -75,9 +70,6 @@ def search(query, online=False, exts=None, pagenum=1, pagelen=100, sortbytime=Fa
                 searchfilter = And([searchfilter, Or(extensionfilter)])
             else:
                 searchfilter = Or(extensionfilter)
-        elif searchfilter is None:
-            searchfilter = NullQuery()
-
     
     finalquery = Term("has_id", "a") # Quicker than Every Query. See doc.
     if query is not None:
