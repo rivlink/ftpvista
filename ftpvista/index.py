@@ -69,8 +69,8 @@ class Index (object):
     
     def delete_all_docs(self, server):
         self.open_writer()
-        writer.delete_by_term('server_id', to_unicode(server.get_server_id()))
-        writer.commit()
+        self._writer.delete_by_term('server_id', to_unicode(server.get_server_id()))
+        self._writer.commit()
         self.log.info('All documents of server %s deleted' % server.get_ip_addr())
     
     def incremental_server_update(self, server_id, current_files):
