@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-from django.conf.urls.defaults import *
-from django.contrib.staticfiles.urls import staticfiles_urlpatterns
-import app.const as c
+from django.conf.urls import patterns, url
 
 UNDER_CONSTRUCTION = False
 
