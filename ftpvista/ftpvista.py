@@ -86,7 +86,7 @@ def clean_player(config):
     
     db_uri = config.get('db', 'uri')
     rivplayer_uri = config.get('db', 'rivplayer_uri')
-    if rivplayer_uri == 'None':
+    if rivplayer_uri == 'None' or rivplayer_uri == '':
         rivplayer_uri = None
     if rivplayer_uri is None:
         log.info("No music database: skipping.")
@@ -135,7 +135,7 @@ def main_daemonized(config, ftpserver_queue):
     # Create the DB to store informations about the FTP servers
     db_uri = config.get('db', 'uri')
     rivplayer_uri = config.get('db', 'rivplayer_uri')
-    if rivplayer_uri == 'None':
+    if rivplayer_uri == 'None' or rivplayer_uri == '':
         rivplayer_uri = None
     persist = ftpvista_persist.FTPVistaPersist(db_uri, rivplayer_uri)
     persist.initialize_store()

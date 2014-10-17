@@ -321,7 +321,8 @@ class WriteDataStage (pipeline.Stage):
 def build_indexer_pipeline(server_id, server_addr, index, persist):
     """Helper function to make a basic indexing pipeline"""
     pipe = pipeline.Pipeline()
-    pipe.append_stage(FetchID3TagsStage(server_addr, persist))
+    if persist.session_player is not None:
+        pipe.append_stage(FetchID3TagsStage(server_addr, persist))
     pipe.append_stage(WriteDataStage(server_addr, server_id, index))
 
     return pipe
