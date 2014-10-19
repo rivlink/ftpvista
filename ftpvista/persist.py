@@ -160,7 +160,7 @@ class FTPServer (object):
 class FTPVistaPersist(object):
     def __init__(self, db_uri, rivplayer_uri=None):
         self.log = logging.getLogger('ftpvista.persist')
-        self.engine = create_engine(db_uri)
+        self.engine = create_engine(db_uri, connect_args={'check_same_thread':False})
         self.meta = MetaData(self.engine)
         if rivplayer_uri is not None:
             self.engine_player = create_engine(rivplayer_uri)
