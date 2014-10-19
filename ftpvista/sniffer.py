@@ -8,7 +8,7 @@ import observer
 import pipeline
 from pipeline import Pipeline
 from timedcache import TimedCache
-import nmap_scanner
+from ftp_tools import FTPTools
 import multiprocessing
 
 class ARPSniffer (observer.Observable):
@@ -97,10 +97,10 @@ class FTPServerFilter (pipeline.Stage):
        (that do not listen on the port 21 to be exact)
     """
     def __init__(self):
-        self._scanner = nmap_scanner.FTPFilter()
+        self._tools = FTPTools()
 
     def execute(self, ip_addr):
-        return self._scanner.is_ftp_open(ip_addr)
+        return self._tools.is_ftp_open(ip_addr)
 
    
 class PutInQueueStage (pipeline.Stage):
