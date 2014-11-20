@@ -21,7 +21,6 @@ import persist as ftpvista_persist
 import pipeline
 from scanner import FTPScanner
 from utils import to_unicode
-import nmap_scanner
 
 class Index (object):
     def __init__(self, dir, persist):

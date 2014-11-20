@@ -30,9 +30,10 @@ class HandleMain():
     context = None
     pidfile = None
 
-def sniffer_task(queue, blacklist, valid_ip_pattern):
+def sniffer_task(queue, blacklist, valid_ip_pattern, subnet, scanner_interval):
     # create an ARP sniffer for discovering the hosts
-    sniffer = ARPSniffer()
+    # sniffer = ARPSniffer()
+    sniffer = ARPScanner(subnet, scanner_interval)
     # Bind the sniffer to a filtering pipeline to discard uninteresting IP
     pipeline = build_machine_filter_pipeline(queue, blacklist, valid_ip_pattern,
                                              drop_duplicate_timeout=10*60)
@@ -151,7 +152,7 @@ def main_daemonized(config, ftpserver_queue):
     update_coordinator = IndexUpdateCoordinator(
                            persist, index, timedelta(hours=min_update_interval), max_depth)
     
-    log.info('Init done, running the update coordinator ..')
+    log.info('Init done, running the update coordinator ...')
     while True:
         # Wait for an FTP server to be detected and update it
         update_coordinator.update_server(ftpserver_queue.get())
@@ -196,6 +197,8 @@ def main(options):
     # Configure the sniffer task and run it in a different thread
     blacklist = str(config.get('indexer', 'blacklist', '')).split(',')
     valid_ip_pattern = config.get('indexer', 'valid_ip_pattern')
+    scanner_interval = config.getint('indexer', 'scanner_interval')
+    subnet = config.get('indexer', 'subnet')
 
     if options.clean:
         s = 'Do you really want to clean ftpvista {clean: %s} (make sure there is no running instances of FTPVista) ? [y/N] : ' % options.clean
@@ -256,7 +259,7 @@ def main(options):
                     sys.exit(2)
                 HandleMain.flock.acquire()
             OwnedProcess(uid=uid, gid=gid, target=main_daemonized, args=(config, ftpserver_queue)).start()
-            OwnedProcess(target=sniffer_task, args=(ftpserver_queue, blacklist, valid_ip_pattern)).start()
+            OwnedProcess(target=sniffer_task, args=(ftpserver_queue, blacklist, valid_ip_pattern, subnet, scanner_interval)).start()
         OwnedProcess.joinall()
     except Exception as e:
         logging.basicConfig(level=logging.DEBUG,

@@ -2,7 +2,7 @@
 
 import re
 
-from scapy.all import sniff, ARP
+from scapy.all import sniff, ARP, arping
 
 import observer
 import pipeline
@@ -10,6 +10,27 @@ from pipeline import Pipeline
 from timedcache import TimedCache
 from ftp_tools import FTPTools
 import multiprocessing
+import time
+
+class ARPScanner (observer.Observable):
+    """Finds the connected hosts with the help of
+       an ARP scan.
+    """
+
+    def __init__(self, subnet, scanner_interval):
+        observer.Observable.__init__(self)
+        self._subnet = subnet
+        self._scanner_interval = scanner_interval
+
+    def run(self):
+        while(True):
+            self.scan()
+            time.sleep(self._scanner_interval)
+
+    def scan(self):
+        ans, _ = arping(self._subnet, verbose=False)
+        for x in ans:
+            self.notify_observers(x[1][ARP].psrc)
 
 class ARPSniffer (observer.Observable):
     """Finds the connected hosts by sniffing the ARP packets.
@@ -36,7 +57,6 @@ class ARPSniffer (observer.Observable):
     def _arp_callback(self, pkt):
         if ARP in pkt:
             self.notify_observers(pkt[ARP].psrc)
-            self.notify_observers(pkt[ARP].pdst)   # FIXME : is this necessary ?
 
     def _stopper(self, _):
         return self.terminate

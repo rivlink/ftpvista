@@ -17,7 +17,7 @@ import id3reader
 from urllib import url2pathname
 
 from utils import Servers, to_unicode
-import nmap_scanner
+import scanner
 
 def never_date():
     """Helper that returns a DateTime object pointing to Epoch.
@@ -317,7 +317,7 @@ class FTPVistaPersist(object):
             If a server have not been seen since 'purgeinterval' days, it is deleted from the index and the database.
         """
         self.log = logging.getLogger('ftpvista.nmaps')
-        self._scanner = nmap_scanner.FTPFilter()
+        self._scanner = scanner.FTPFilter()
         while True:
             self.check(purgeinterval)
             time.sleep(int(interval))
