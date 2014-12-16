@@ -39,11 +39,11 @@ class Index (object):
             self._idx = index.open_dir(dir)
 
         self._searcher = self._idx.searcher()
-        #self._writer = BufferedWriter(self._idx, 120, 4000)
         self.open_writer()
         self._last_optimization = None
 
     def open_writer(self):
+        #self._writer = BufferedWriter(self._idx, 120, 4000)
         self._writer = AsyncWriter(self._idx)
 
     def get_schema(self):
@@ -387,7 +387,7 @@ class IndexUpdateCoordinator(object):
         # Index the files
         pipeline = build_indexer_pipeline(server_id, server_addr, self._index, self._persist)
         # Reopen writer
-        self._index.open_writer()
+        # self._index.open_writer()
         for path, size, mtime in files:
             ctx = FileIndexerContext(path, size, mtime)
             pipeline.execute(ctx)
