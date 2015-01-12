@@ -2,16 +2,14 @@
 
 import logging
 import os, os.path
-from time import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from StringIO import StringIO
 from urllib import pathname2url
 
 import pycurl
 import id3reader
 from whoosh import index
-from whoosh.fields import Schema, ID, IDLIST, KEYWORD, TEXT
-from whoosh.analysis import StandardAnalyzer
+from whoosh.fields import Schema, ID, TEXT
 from whoosh.query import Term
 from whoosh.writing import BufferedWriter, AsyncWriter, IndexingError
 from whoosh.analysis import CharsetFilter, StemmingAnalyzer
@@ -22,23 +20,21 @@ import pipeline
 from scanner import FTPScanner
 from utils import to_unicode
 
-class Index (object):
-    def __init__(self, dir, persist):
+class Index(object):
+    def __init__(self, directory, persist):
         self.log = logging.getLogger('ftpvista.index')
-        
+
         self._persist = persist
-        if not os.path.exists(dir):
-            # (Re)creating the index, so if the music database is not empty, it must be emptied
-            self.log.info('Emptying music database')
-            self._persist.truncate_all()
-            self.log.info('Creating the index in %s' % dir)
-            os.mkdir(dir)
-            self._idx = index.create_in(dir, schema=self.get_schema())
+        if not os.path.exists(directory):
+            self.log.info('Creating the index in %s' % directory)
+            os.mkdir(directory)
+            self._idx = index.create_in(directory, schema=self.get_schema())
         else:
-            self.log.info('Opening the index in %s' % dir)
-            self._idx = index.open_dir(dir)
+            self.log.info('Opening the index in %s' % directory)
+            self._idx = index.open_dir(directory)
 
         self._searcher = self._idx.searcher()
+        self._writer = None
         self.open_writer()
         self._last_optimization = None
 
@@ -65,13 +61,13 @@ class Index (object):
                       audio_track=ID(stored=True),
                       audio_year=ID(stored=True)
                       )
-    
+
     def delete_all_docs(self, server):
         self.open_writer()
         self._writer.delete_by_term('server_id', to_unicode(server.get_server_id()))
         self._writer.commit()
         self.log.info('All documents of server %s deleted' % server.get_ip_addr())
-    
+
     def incremental_server_update(self, server_id, current_files):
         """Prepares to incrementaly update the documents for the given server.
 
@@ -83,14 +79,9 @@ class Index (object):
         of files needing to be reindexed.
         """
 
-        def delete_doc(writer, serverid, path, persist):
-            writer.delete_by_query(Term('server_id', serverid) & 
+        def delete_doc(writer, serverid, path):
+            writer.delete_by_query(Term('server_id', serverid) &
                                       Term('path', path))
-            # Deleting musics from rivplayer database
-            #TODO put extensions in config file
-            if path.lower().endswith('.mp3'):
-                persist.del_track(path)
-
 
         # Build a {path => (size, mtime)} mapping for quick lookups
         to_index = {}
@@ -104,7 +95,7 @@ class Index (object):
 
                 if indexed_path not in to_index:
                     # This file was deleted from the server since it was indexed
-                    delete_doc(self._writer, server_id, indexed_path, self._persist)
+                    delete_doc(self._writer, server_id, indexed_path)
                     self.log.debug("%s has been removed" % indexed_path)
                 else:
                     size, mtime = to_index[indexed_path]
@@ -112,12 +103,12 @@ class Index (object):
                         if mtime > datetime.strptime(fields['mtime'],
                                                      '%Y-%m-%d %H:%M:%S'):
                             # This file has been modified since it was indexed
-                            delete_doc(self._writer, server_id, indexed_path, self._persist)
+                            delete_doc(self._writer, server_id, indexed_path)
                         else:
                             # up to date, no need to reindex
                             del to_index[indexed_path]
                     except ValueError, e:
-                        delete_doc(self._writer, server_id, indexed_path, self._persist)
+                        delete_doc(self._writer, server_id, indexed_path)
 
         # return the remaining files
         return [(path, size, mtime)
@@ -158,7 +149,7 @@ class Index (object):
 
         if audio_year is not None:
             kwargs['audio_year'] = audio_year
-            
+
         try:
             self._writer.add_document(**kwargs)
         except IndexingError as e:
@@ -178,17 +169,17 @@ class Index (object):
         #    self._idx.optimize()
         #    self._last_optimization = time()
         self.log.info('Index commited')
-        
+
         self._searcher = self._idx.searcher()
         self.log.info(' -- End of Commit -- ')
-        
+
     def close(self):
         self.log.info(' -- Closing writer and index -- ')
-        self._writer.close()
+        # self._writer.close()
         """ Close the index """
         self._idx.close()
 
-class FileIndexerContext (pipeline.Context):
+class FileIndexerContext(pipeline.Context):
     """ A pipeline Context object to store the informations about a file"""
     def __init__(self, file_path, size, mtime):
         self._path = file_path
@@ -212,7 +203,7 @@ class FileIndexerContext (pipeline.Context):
         return self._extra_data
 
 
-class FetchID3TagsStage (pipeline.Stage):
+class FetchID3TagsStage(pipeline.Stage):
     """Pipeline stage to find the ID3 tags of audio files."""
 
     def __init__(self, server_addr, persist, extensions=['mp3'], fetch_size=2048):
@@ -277,30 +268,24 @@ class FetchID3TagsStage (pipeline.Stage):
                             id3_map[tag] = value
                             # add the tag in the context object
                             context.set_extra_data('audio_%s' % tag, value)
-    
+
                 except (id3reader.Id3Error, UnicodeDecodeError), e:
                     self.log.error('%s : %r' % (path, e))
-                
-                # TODO: Il faut récupérer d'autres informations !
-                try:
-                    self._persist.add_track(id3_map['title'], to_unicode('ftp://%s%s' % (self._server_addr, pathname2url(path.encode('utf-8')))), id3_map['performer'], id3_map['genre'], id3_map['album'], year=id3_map['year'], trackno=id3_map['track'])
-                except Exception as e:
-                    self.log.error(u'Error while adding song to DB : %r' % e)
 
         # Whatever the outcome of this stage,
         # continue the execution of the pipeline
         return True
 
 
-class WriteDataStage (pipeline.Stage):
+class WriteDataStage(pipeline.Stage):
     """ Pipeline stage object that writes the informations in the given index.
     """
-    def __init__(self, server_addr, server_id, index):
+    def __init__(self, server_addr, server_id, myindex):
         self.log = logging.getLogger('ftpvista.pipe.write.%s' % \
                                      server_addr.replace('.', '_'))
 
         self._server_id = server_id
-        self._index = index
+        self._index = myindex
 
     def execute(self, context):
         def get_extra(key):
@@ -325,18 +310,18 @@ class WriteDataStage (pipeline.Stage):
         return True
 
 
-def build_indexer_pipeline(server_id, server_addr, index, persist):
+def build_indexer_pipeline(server_id, server_addr, myindex, persist):
     """Helper function to make a basic indexing pipeline"""
     pipe = pipeline.Pipeline()
     pipe.append_stage(FetchID3TagsStage(server_addr, persist))
-    pipe.append_stage(WriteDataStage(server_addr, server_id, index))
+    pipe.append_stage(WriteDataStage(server_addr, server_id, myindex))
 
     return pipe
 
 class IndexUpdateCoordinator(object):
     """Coordinate the scanning and indexing of FTP servers."""
 
-    def __init__(self, persist, index, min_update_interval, max_depth):
+    def __init__(self, persist, myindex, min_update_interval, max_depth):
         """Initialize an update coordinator.
 
         Args:
@@ -347,7 +332,7 @@ class IndexUpdateCoordinator(object):
         """
         self.log = logging.getLogger('ftpvista.coordinator')
         self._persist = persist
-        self._index = index
+        self._index = myindex
         self._update_interval = min_update_interval
         self._max_depth = max_depth
 
@@ -377,7 +362,7 @@ class IndexUpdateCoordinator(object):
         # compute the size of all the files found
         size = reduce(lambda total_size, file: total_size + file[1], files, 0)
         self.log.info('Found %d files (%d G) on %s' % (len(files),
-                                                       size / (1073741824) , # 1073741824 = 1024 ** 3
+                                                       size / (1073741824), # 1073741824 = 1024 ** 3
                                                        server_addr))
 
         # Set new informatons about this server in the DB
@@ -393,12 +378,12 @@ class IndexUpdateCoordinator(object):
         files = sorted(files, key=lambda file: file[0])
 
         # Index the files
-        pipeline = build_indexer_pipeline(server_id, server_addr, self._index, self._persist)
+        mypipeline = build_indexer_pipeline(server_id, server_addr, self._index, self._persist)
         # Reopen writer
         # self._index.open_writer()
         for path, size, mtime in files:
             ctx = FileIndexerContext(path, size, mtime)
-            pipeline.execute(ctx)
+            mypipeline.execute(ctx)
 
         # Scan done, update the last scanned date
         server.update_last_scanned()

@@ -2,6 +2,7 @@
 MOST_POPULAR_ENCODINGS = ['utf_8', 'ascii', 'iso8859_2']
 
 import locale
+import os
 
 def to_unicode(text, charset=None):
     """Convert a `str` object to an `unicode` object.
@@ -42,23 +43,24 @@ def to_unicode(text, charset=None):
         return unicode(text, locale.getpreferredencoding(), 'replace')
 
 class Servers:
-    
+
     correspondences = None
-    
+
     @staticmethod
     def fetch_correspondences():
         Servers.correspondences = list()
-        f = open('/home/ftpvista/ftpvista3/correspondences.ftp','r')
+        directory = os.path.dirname(os.path.realpath(__file__))
+        f = open(os.path.join(directory, '..', 'correspondences.ftp'), 'r')
         for line in f.readlines():
             Servers.correspondences.append(line.split('\t'))
         f.close()
-    
+
     @staticmethod
     def get_correspondences():
         if Servers.correspondences == None:
             Servers.fetch_correspondences()
         return Servers.correspondences
-    
+
     @staticmethod
     def get_ip_with_name(sIP):
         correspondences = Servers.get_correspondences()
@@ -66,3 +68,13 @@ class Servers:
             if sIP == ip:
                 return ip + " - " + surnom.strip()
         return sIP
+
+    @staticmethod
+    def get_ip_from_name(name):
+        name = name.lower()
+        correspondences = Servers.get_correspondences()
+        for ip, surnom in correspondences:
+            if name == surnom.strip().lower():
+                return ip
+        return None
+
