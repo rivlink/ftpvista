@@ -97,8 +97,10 @@ def search(query, online=False, exts=None, pagenum=1, pagelen=100, sortbytime=Fa
                 'name' : result['name'],
                 'url' : 'ftp://%s%s' % (server_ip, result['path']),
                 'size' : int(result['size']),
-                'mtime' : datetime.strptime(result['mtime'], "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y")
-            }
+                'mtime' : ''
+        }
+        if result['mtime'] is not None and result['mtime'] != u'None':
+            hit['mtime'] = datetime.strptime(result['mtime'], "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y")
         
         bIsAudio = False
         for extra in['audio_performer', 'audio_title', 'audio_album', 'audio_year']:
