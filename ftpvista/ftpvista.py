@@ -278,7 +278,7 @@ def main(args):
         close_daemon()
         raise
 
-if __name__ == '__main__':
+def init():
     parser = argparse.ArgumentParser(version="FTPVista 3.0")
 
     parser.add_argument("-c", "--config", dest="config_file", metavar="FILE", default='/home/ftpvista/ftpvista3/ftpvista.conf', help="Path to the config file")
@@ -292,5 +292,7 @@ if __name__ == '__main__':
     parser_delete.add_argument("server", help="IP (or name from correspondences file) of the server to delete")
 
     args = parser.parse_args()
-
     main(args)
+
+if __name__ == '__main__':
+    init()

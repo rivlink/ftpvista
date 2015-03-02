@@ -107,8 +107,12 @@ class FTPScanner(object):
                 else:
                     try:
                         size = int(size)
-                        # TODO : splitting the string and then joining it sux balls
                         date = self.parse_date(' '.join([date1, date2, date3]))
+
+                        # Fix dates in the future
+                        if date is not None and date > datetime.now():
+                            date = date.replace(datetime.now().year - 1)
+
                         files.append((to_unicode(full_path), size, date))
                     except ValueError:
                         return
