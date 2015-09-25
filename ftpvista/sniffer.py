@@ -4,13 +4,14 @@ import re
 
 from scapy.all import sniff, ARP, arping
 
-import observer
-import pipeline
-from pipeline import Pipeline
-from timedcache import TimedCache
-from ftp_tools import FTPTools
+from . import observer
+from . import pipeline
+from .pipeline import Pipeline
+from .timedcache import TimedCache
+from .ftp_tools import FTPTools
 import multiprocessing
 import time
+
 
 class ARPScanner (observer.Observable):
     """Finds the connected hosts with the help of
@@ -32,6 +33,7 @@ class ARPScanner (observer.Observable):
         for x in ans:
             self.notify_observers(x[1][ARP].psrc)
 
+
 class ARPSniffer (observer.Observable):
     """Finds the connected hosts by sniffing the ARP packets.
 
@@ -47,19 +49,20 @@ class ARPSniffer (observer.Observable):
         """Run the sniffer"""
         try:
             sniff(filter="arp", prn=self._arp_callback, store=False, stop_filter=self._stopper)
-        except TypeError, e:
-            print "Ok! This error likely happened because you are not using scapy version 2.2 or above"
+        except TypeError as e:
+            print("Ok! This error likely happened because you are not using scapy version 2.2 or above")
             raise
 
     def stop(self):
         self.terminate = True
-        
+
     def _arp_callback(self, pkt):
         if ARP in pkt:
             self.notify_observers(pkt[ARP].psrc)
 
     def _stopper(self, _):
         return self.terminate
+
 
 class SnifferToPipelineAdapter (observer.Observer):
     """Adapter class.
@@ -122,7 +125,7 @@ class FTPServerFilter (pipeline.Stage):
     def execute(self, ip_addr):
         return self._tools.is_ftp_open(ip_addr)
 
-   
+
 class PutInQueueStage (pipeline.Stage):
     """Put all the recieved  IP addresses in the specified queue"""
     def __init__(self, queue):
@@ -143,4 +146,3 @@ def build_machine_filter_pipeline(queue, blacklist, valid_addr_pattern,
     pipeline.append_stage(PutInQueueStage(queue))
 
     return pipeline
-

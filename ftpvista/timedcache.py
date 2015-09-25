@@ -3,7 +3,8 @@
 import time
 from collections import deque
 
-#TODO: docstrings
+# TODO: docstrings
+
 
 class TimedCache:
     def __init__(self, timeout, time_func=time.time):
@@ -17,8 +18,7 @@ class TimedCache:
         return obj in self._objs
 
     def _remove_outdated(self):
-        while len(self._queue) > 0 and (self._current_time() - self._objs[self._queue[-1]]) \
-            > self._timeout:
+        while len(self._queue) > 0 and (self._current_time() - self._objs[self._queue[-1]]) > self._timeout:
             del self._objs[self._queue.pop()]
 
     def add(self, obj):

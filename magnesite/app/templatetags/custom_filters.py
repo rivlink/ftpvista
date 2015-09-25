@@ -8,7 +8,7 @@ def filesizeformat2(bytes):
     try:
         bytes = float(bytes)
     except (TypeError,ValueError,UnicodeDecodeError):
-        return u"0 octets"
+        return "0 octets"
 
     if bytes < 1024:
         return ungettext("%(size)d octet", "%(size)d octets", bytes) % {'size': bytes}

@@ -3,6 +3,7 @@
 import socket
 import logging
 
+
 class FTPTools:
     def __init__(self):
         self.log = logging.getLogger('ftpvista.ftptools')
@@ -12,4 +13,3 @@ class FTPTools:
         sock.settimeout(1)
         result = sock.connect_ex((addr, 21))
         return result == 0
-

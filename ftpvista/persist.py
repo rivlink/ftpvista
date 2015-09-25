@@ -1,51 +1,56 @@
 # -*- coding: utf-8 -*-
 
 import logging
-from datetime import datetime, timedelta
 import time
-
 import sqlalchemy
+from datetime import datetime, timedelta
 from sqlalchemy import *
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import mapper, sessionmaker
 from sqlalchemy.exc import ArgumentError
 from sqlalchemy.dialects.mysql import TEXT
-import id3reader
+from . import id3reader
+from .utils import Servers
+from . import ftp_tools
 
-from utils import Servers, to_unicode
-import ftp_tools
 
 def never_date():
     """Helper that returns a DateTime object pointing to Epoch.
     This value is used as 'Never'."""
     return datetime.fromtimestamp(0)
 
-def build_tables(meta):
-    ftpservers = Table(
-        'ftpservers', meta,
-        Column('id', Integer, primary_key=True),
-        Column('ip', String(15), nullable=False, unique=True),
-        Column('first_seen', sqlalchemy.types.DateTime(timezone=True), nullable=False, default=datetime.now),
-        Column('last_seen', sqlalchemy.types.DateTime(timezone=True), nullable=False, default=datetime.now),
-        Column('last_scanned', sqlalchemy.types.DateTime(timezone=True), nullable=False, default=never_date),
-        Column('nb_files', Integer, default=0),
-        Column('files_size', Integer, default=0)
-        )
-    return ftpservers
 
-class FTPServer(object):
+def now():
+    return datetime.now()
+
+
+Base = declarative_base()
+
+
+class FTPServer(Base):
+    __tablename__ = 'ftpserver'
+
+    id = Column(Integer, primary_key=True)
+    ip = Column(String(15), nullable=False, unique=True)
+    first_seen = Column(sqlalchemy.types.DateTime(timezone=True), nullable=False, default=now)
+    last_seen = Column(sqlalchemy.types.DateTime(timezone=True), nullable=False, default=now)
+    last_scanned = Column(sqlalchemy.types.DateTime(timezone=True), nullable=False, default=never_date)
+    nb_files = Column(Integer, default=0)
+    files_size = Column(Integer, default=0)
+
     def __init__(self, ip_addr):
         self.ip = ip_addr
 
     def update_last_seen(self, time=None):
         """As default value is evaluated only once, and is shared between calls,
         the 'time' variable must be instanciated each time the method is called"""
-        if time == None:
+        if time is None:
             time = datetime.now()
         self.last_seen = time
 
     def update_last_scanned(self, time=None):
         """Same as 'update_last_seen' method"""
-        if time == None:
+        if time is None:
             time = datetime.now()
         self.last_scanned = time
 
@@ -84,28 +89,23 @@ class FTPServer(object):
             return "online"
         return "offline"
 
+
 class FTPVistaPersist(object):
     def __init__(self, db_uri):
         self.log = logging.getLogger('ftpvista.persist')
-        self.engine = create_engine(db_uri, connect_args={'check_same_thread':False})
-        self.meta = MetaData(self.engine)
+        self.engine = create_engine(db_uri, connect_args={'check_same_thread': False})
 
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
-        self.servers = build_tables(self.meta)
 
         self._tools = ftp_tools.FTPTools()
         self.index = None
-        try:
-            mapper(FTPServer, self.servers)
-        except ArgumentError:
-            pass
+
+    def initialize_store(self):
+        Base.metadata.create_all(self.engine)
 
     def set_index(self, index):
         self.index = index
-
-    def initialize_store(self):
-        self.meta.create_all()
 
     def get_server_by_name(self, name):
         ip = Servers.get_ip_from_name(name)
@@ -116,7 +116,7 @@ class FTPVistaPersist(object):
     def get_server_by_ip(self, ip_addr, create=True):
         server = self.session.query(FTPServer).filter_by(ip=ip_addr).first()
 
-        if create and server == None:
+        if create and server is None:
             server = FTPServer(ip_addr)
             self.session.add(server)
             self.session.commit()
@@ -165,4 +165,3 @@ class FTPVistaPersist(object):
 
     def rollback(self):
         self.session.rollback()
-

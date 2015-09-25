@@ -2,44 +2,36 @@
 # -*- coding: utf-8 -*-
 
 import logging
-import ConfigParser
-from datetime import timedelta
+import configparser
 import argparse
-from multiprocessing import Queue
 import socket
 import os
-import daemon
-import lockfile
-import signal
 import sys
 import traceback
 import shutil
+from datetime import timedelta
+from multiprocessing import Queue
+from ftpvista.index import Index, IndexUpdateCoordinator
+from ftpvista.multiprocess import OwnedProcess
+from ftpvista import persist as ftpvista_persist
+from ftpvista import pipeline
+from ftpvista import observer
+from ftpvista.sniffer import *
 
 os.environ['TZ'] = 'CET'
 
-from index import Index, IndexUpdateCoordinator
-from multiprocess import OwnedProcess
-import persist as ftpvista_persist
-import pipeline
-import observer
-from sniffer import *
-
-class HandleMain():
-    flock = None
-    context = None
-    pidfile = None
 
 def sniffer_task(queue, blacklist, valid_ip_pattern, subnet, scanner_interval):
     # create an ARP sniffer for discovering the hosts
     # sniffer = ARPSniffer()
     sniffer = ARPScanner(subnet, scanner_interval)
     # Bind the sniffer to a filtering pipeline to discard uninteresting IP
-    apipeline = build_machine_filter_pipeline(queue, blacklist, valid_ip_pattern,
-                                             drop_duplicate_timeout=10*60)
+    apipeline = build_machine_filter_pipeline(queue, blacklist, valid_ip_pattern, drop_duplicate_timeout=10*60)
     SnifferToPipelineAdapter(sniffer, apipeline)
 
     # Run sniffer, run ..
     sniffer.run()
+
 
 def delete_server(config, sserver):
     logging.basicConfig(level=logging.DEBUG,
@@ -61,9 +53,11 @@ def delete_server(config, sserver):
     else:
         log.info('No server found corresponding to %s', sserver)
 
+
 def clean_all(config):
     clean_db(config)
     clean_index(config)
+
 
 def clean_db(config):
     logging.basicConfig(level=logging.DEBUG,
@@ -81,6 +75,7 @@ def clean_db(config):
     else:
         log.info("No database : skipping.")
 
+
 def clean_index(config):
     logging.basicConfig(level=logging.DEBUG,
                         format='[%(asctime)s] %(message)s')
@@ -93,6 +88,7 @@ def clean_index(config):
         log.info("Index deleted")
     else:
         log.info("Index not found : skipping.")
+
 
 def check_online(config):
     logging.basicConfig(level=logging.DEBUG,
@@ -114,15 +110,18 @@ def check_online(config):
 
     persist.launch_online_checker(update_interval, purge_interval)
 
+
 def get_persist(config):
     db_uri = config.get('db', 'uri')
     persist = ftpvista_persist.FTPVistaPersist(db_uri)
     persist.initialize_store()
     return persist
 
+
 def get_index(config, persist):
     index_uri = config.get('index', 'uri')
     return Index(index_uri, persist)
+
 
 def main_daemonized(config, ftpserver_queue):
 
@@ -146,7 +145,7 @@ def main_daemonized(config, ftpserver_queue):
     # This defines how and at which period to perform updates from the servers
     min_update_interval = config.getint('indexer', 'min_update_interval')
 
-    max_depth = config.get('indexer', 'max_depth')
+    max_depth = config.getint('indexer', 'max_depth')
     update_coordinator = IndexUpdateCoordinator(
                            persist, index, timedelta(hours=min_update_interval), max_depth)
 
@@ -155,41 +154,23 @@ def main_daemonized(config, ftpserver_queue):
         # Wait for an FTP server to be detected and update it
         update_coordinator.update_server(ftpserver_queue.get())
 
+
 def sigterm_handler(signum, frame):
     close_daemon()
 
-def close_daemon():
-    destroy_pid_file()
-    if HandleMain.flock is not None:
-        HandleMain.flock.release()
-    if HandleMain.context is not None:
-        HandleMain.context.close()
-    OwnedProcess.terminateall()
-    os._exit(os.EX_OK)
-
-def cleanup_and_close():
-    pass
-
-def create_pid_file(pid_file):
-    HandleMain.pidfile = pid_file
-    f = open(HandleMain.pidfile, 'w')
-    f.write(str(os.getpid()))
-
-def destroy_pid_file():
-    if HandleMain.pidfile is not None:
-        os.remove(HandleMain.pidfile)
 
 def launch(config, func, args):
     uid = config.getint('indexer', 'uid')
     gid = config.getint('indexer', 'gid')
     OwnedProcess(uid=uid, gid=gid, target=func, args=args).start()
 
+
 def main(args):
-    config = ConfigParser.SafeConfigParser()
+    config = configparser.SafeConfigParser()
     config.read(args.config_file)
 
-    ## From now we can set the application to use a different user id and group id
-    ## much better for security reasons
+    # From now we can set the application to use a different user id and group id
+    # much better for security reasons
     uid = config.getint('indexer', 'uid')
     gid = config.getint('indexer', 'gid')
 
@@ -198,7 +179,11 @@ def main(args):
     ftpserver_queue = Queue(100)
 
     # Configure the sniffer task and run it in a different thread
-    blacklist = str(config.get('indexer', 'blacklist', '')).split(',')
+    blacklist = config.get('indexer', 'blacklist')
+    if blacklist is not None:
+        blacklist = blacklist.split(',')
+    else:
+        blacklist = []
     valid_ip_pattern = config.get('indexer', 'valid_ip_pattern')
     scanner_interval = config.getint('indexer', 'scanner_interval')
     subnet = config.get('indexer', 'subnet')
@@ -214,75 +199,38 @@ def main(args):
             fct = clean_index
         else:
             raise Exception("Invalid value %s" % args.subject)
-        result = raw_input(question)
+        result = input(question)
         if result.upper() == 'Y':
             launch(config, fct, (config,))
         return 0
     elif args.action == 'delete':
         question = 'Do you really want to delete server %s ? [y/N] : ' % args.server
-        result = raw_input(question)
+        result = input(question)
         if result.upper() == 'Y':
             launch(config, delete_server, (config, args.server))
         return 0
 
-
-    """Daemonize FTPVista"""
-    if args.daemon:
-        #Context
-        HandleMain.context = daemon.DaemonContext(
-            working_directory=config.get('indexer', 'working_directory')
-        )
-
-        #Mapping signals to methods
-        HandleMain.context.signal_map = {
-            signal.SIGTERM: sigterm_handler,
-            signal.SIGHUP: sigterm_handler,
-            signal.SIGINT: sigterm_handler,
-            #signal.SIGUSR1: reload_program_config,
-        }
-        HandleMain.context.detach_process = True
-        HandleMain.context.sigterm_handler = sigterm_handler
-        HandleMain.context.open()
-    else:
-        signal.signal(signal.SIGTERM, sigterm_handler)
-        signal.signal(signal.SIGHUP, sigterm_handler)
-        signal.signal(signal.SIGINT, sigterm_handler)
-
     try:
         if args.action == 'start':
-            if args.daemon:
-                create_pid_file(config.get('indexer', 'pid'))
-                HandleMain.flock = lockfile.FileLock(config.get('indexer', 'pid'))
-                if HandleMain.flock.is_locked():
-                    print ("Already launched ... exiting")
-                    sys.exit(2)
-                HandleMain.flock.acquire()
             OwnedProcess(uid=uid, gid=gid, target=main_daemonized, args=(config, ftpserver_queue)).start()
             OwnedProcess(target=sniffer_task, args=(ftpserver_queue, blacklist, valid_ip_pattern, subnet, scanner_interval)).start()
         elif args.action == 'start-oc':
-            if args.daemon:
-                create_pid_file(config.get('online_checker', 'pid'))
-                HandleMain.flock = lockfile.FileLock(config.get('online_checker', 'pid'))
-                if HandleMain.flock.is_locked():
-                    print ("Already launched ... exiting")
-                    sys.exit(3)
-                HandleMain.flock.acquire()
             OwnedProcess(target=check_online, args=(config,)).start()
         OwnedProcess.joinall()
     except Exception as e:
         logging.basicConfig(level=logging.DEBUG,
-            format='%(asctime)s %(levelname)s:%(name)s:%(message)s',
-            filename=config.get('logs', 'main'))
+                            format='%(asctime)s %(levelname)s:%(name)s:%(message)s',
+                            filename=config.get('logs', 'main'))
         log = logging.getLogger('ftpvista.main')
         log.error('Error in main : %s', traceback.format_exc())
         close_daemon()
         raise
 
+
 def init():
-    parser = argparse.ArgumentParser(version="FTPVista 3.0")
+    parser = argparse.ArgumentParser(description="FTPVista 4.0")
 
     parser.add_argument("-c", "--config", dest="config_file", metavar="FILE", default='/home/ftpvista/ftpvista3/ftpvista.conf', help="Path to the config file")
-    parser.add_argument("-d", "--daemon", action="store_true", dest="daemon", default=False, help="Run FTPVista as a Daemon")
     subparsers = parser.add_subparsers(dest='action')
     parser_start = subparsers.add_parser('start', help='Start FTPVista')
     parser_start_oc = subparsers.add_parser('start-oc', help='Start Online checker')

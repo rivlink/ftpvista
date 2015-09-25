@@ -3,13 +3,13 @@ import app.const as c
 
 class LastForm(forms.Form):
     ft = forms.MultipleChoiceField(choices=(
-        (c.VIDEOS, u'Videos'),
-        (c.AUDIOS, u'Audios'),
-        (c.IMAGES, u'Images'),
-        (c.ARCHIVES, u'Archives'),
-        (c.DISKIMAGES, u'Images disques')
-    ), label=u'Type de fichiers', widget=forms.SelectMultiple(attrs={'class':'ft'}))
-    os = forms.BooleanField(label=u'Serveurs online seulement')
+        (c.VIDEOS, 'Videos'),
+        (c.AUDIOS, 'Audios'),
+        (c.IMAGES, 'Images'),
+        (c.ARCHIVES, 'Archives'),
+        (c.DISKIMAGES, 'Images disques')
+    ), label='Type de fichiers', widget=forms.SelectMultiple(attrs={'class':'ft'}))
+    os = forms.BooleanField(label='Serveurs online seulement')
 
 class SearchForm(LastForm):
     s = forms.CharField(max_length=100)

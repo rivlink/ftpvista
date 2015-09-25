@@ -14,8 +14,8 @@ from django.core.urlresolvers import reverse
 if six.PY3:
     from urllib.parse import urlparse, parse_qsl, urlunparse, urlencode
 else:
-    from urlparse import urlparse, parse_qsl, urlunparse
-    from urllib import urlencode
+    from urllib.parse import urlparse, parse_qsl, urlunparse
+    from urllib.parse import urlencode
 
 
 register = Library()

@@ -4,12 +4,13 @@ import unittest
 
 import sqlalchemy
 
-import persist
+from . import persist
 
 
 TEST_DB_URI = 'sqlite://'
 TEST_IP1 = '10.90.0.1'
 TEST_IP2 = '10.90.0.2'
+
 
 class TestFTPVistaPersist(unittest.TestCase):
     def setUp(self):
@@ -23,7 +24,7 @@ class TestFTPVistaPersist(unittest.TestCase):
         sqlalchemy.orm.clear_mappers()
 
     def testGetServerByIpAddress(self):
-        #TEST_IP1 is already in the DB
+        # TEST_IP1 is already in the DB
         self.assertEquals(self.server1, self.persist.get_server_by_ip(TEST_IP1))
 
         # The previous operation musnt insert a new record
@@ -38,7 +39,6 @@ class TestFTPVistaPersist(unittest.TestCase):
         server2 = self.persist.get_server_by_ip(TEST_IP2)
         self.assertEquals(frozenset([self.server1, server2]),
                           frozenset(self.persist.get_servers()))
-
 
 
 if __name__ == '__main__':

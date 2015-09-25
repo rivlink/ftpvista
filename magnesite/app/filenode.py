@@ -1,4 +1,4 @@
-import const as c
+from . import const as c
 from utils import Servers
 from os import path
 

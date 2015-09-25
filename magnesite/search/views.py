@@ -17,7 +17,7 @@ def index(request):
     form = SearchForm({'os':True})
     lastform = LastForm()
     return render(request, 'index.html', {'base_url': base_url,
-                                             'sTrId': u'node-',
+                                             'sTrId': 'node-',
                                              'servers': models.get_servers(),
                                              'nb_files': models.get_nb_files(),
                                              'files_size': models.get_files_size(),
@@ -34,7 +34,7 @@ def get_all_extensions(filter_list):
 def search(request):
     base_url = request.build_absolute_uri('/')[:-1]
     query = request.GET.get('s', None)
-    online_seulement = request.GET.has_key('os')
+    online_seulement = 'os' in request.GET
     filter_list = request.GET.getlist('ft')
     try:
         page = int(request.GET.get('page', 1))
@@ -60,7 +60,7 @@ def search(request):
     return render(request, 'index.html', {'base_url': base_url,
                                              'query' : query,
                                              'aFileNodes': fileNodes,
-                                             'sTrId': u'node-',
+                                             'sTrId': 'node-',
                                              'servers': models.get_servers(),
                                              'nb_files': models.get_nb_files(),
                                              'files_size': models.get_files_size(),
@@ -72,7 +72,7 @@ def search(request):
 
 def last(request):
     base_url = request.build_absolute_uri('/')[:-1]
-    online_seulement = request.GET.has_key('os')
+    online_seulement = 'os' in request.GET
     filter_list = request.GET.getlist('ft')
     try:
         page = int(request.GET.get('page', 1))
@@ -89,7 +89,7 @@ def last(request):
     
     return render(request, 'index.html', {'base_url': base_url,
                                              'aFileNodes': fileNodes,
-                                             'sTrId': u'node-',
+                                             'sTrId': 'node-',
                                              'servers': models.get_servers(),
                                              'nb_files': models.get_nb_files(),
                                              'files_size': models.get_files_size(),
@@ -102,7 +102,7 @@ def last(request):
 
 def search_results(request):
     query = request.GET.get('s', None)
-    online_seulement = request.GET.has_key('os')
+    online_seulement = 'os' in request.GET
     filter_list = request.GET.getlist('ft')
     hits = None
     is_last_page = False

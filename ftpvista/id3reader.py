@@ -1,3 +1,7 @@
+import struct
+import sys
+import zlib
+
 """ Read ID3 tags from a file.
     Ned Batchelder, http://nedbatchelder.com/code/modules/id3reader.html
 """
@@ -5,8 +9,6 @@
 __version__ = '1.53.20070415'    # History at the end of the file.
 
 # ID3 specs: http://www.id3.org/develop.html
-
-import struct, sys, zlib
 
 # These are the text encodings, indexed by the first byte of a text value.
 _encodings = ['iso8859-1', 'utf-16', 'utf-16be', 'utf-8']
@@ -24,30 +26,29 @@ _simpleDataMapping = {
     'comment':      ('COMM', 'COM', 'v1comment'),
 }
 
-# Provide booleans for older Pythons.
-try:
-    True, False
-except NameError:
-    True, False = 1==1, 1==0
-
 # Tracing
 _t = False
+
+
 def _trace(msg):
-    print msg
+    print(msg)
 
 # Coverage
 _c = False
 _features = {}
+
+
 def _coverage(feat):
-    #if _t: _trace('feature '+feat)
+    # if _t: _trace('feature '+feat)
     _features[feat] = _features.setdefault(feat, 0)+1
+
 
 def _safestr(s):
     """ Get a good string for printing, that won't throw exceptions,
         no matter what's in it.
     """
     try:
-        return unicode(s).encode(sys.getdefaultencoding())
+        return str(s).encode(sys.getdefaultencoding())
     except UnicodeError:
         return '?: '+repr(s)
 
@@ -81,10 +82,12 @@ _genres = [
     'Contemporary Christian', 'Christian Rock', 'Merengue', 'Salsa', 'Thrash Metal', 'Anime', 'JPop', 'Synthpop'
     ]
 
+
 class Id3Error(Exception):
     """ An exception caused by id3reader properly handling a bad ID3 tag.
     """
     pass
+
 
 class _Header:
     """ Represent the ID3 header in a tag.
@@ -100,6 +103,7 @@ class _Header:
 
     def __str__(self):
         return str(self.__dict__)
+
 
 class _Frame:
     """ Represent an ID3 frame in a tag.
@@ -127,7 +131,7 @@ class _Frame:
         """
         if len(self.rawData) == 0:
             # This is counter to the spec, but seems harmless enough.
-            #if _c: _coverage('zero data')
+            # if _c: _coverage('zero data')
             return
 
         if self.bCompressed:
@@ -138,10 +142,10 @@ class _Frame:
             # Text fields start with T
             encoding = ord(self.rawData[0])
             if 0 <= encoding < len(_encodings):
-                #if _c: _coverage('encoding%d' % encoding)
+                # if _c: _coverage('encoding%d' % encoding)
                 value = self.rawData[1:].decode(_encodings[encoding])
             else:
-                #if _c: _coverage('bad encoding')
+                # if _c: _coverage('bad encoding')
                 value = self.rawData[1:]
             # Don't let trailing zero bytes fool you.
             if value:
@@ -149,7 +153,7 @@ class _Frame:
             # The value can actually be a list.
             if '\0' in value:
                 value = value.split('\0')
-                #if _c: _coverage('textlist')
+                # if _c: _coverage('textlist')
             self.value = value
         elif self.id[0] == 'W':
             # URL fields start with W
@@ -161,9 +165,9 @@ class _Frame:
             if self.rawData[0] == 'z':
                 self.rawData = zlib.decompress(self.rawData[5:])
             else:
-                #if _c: _coverage('badcdm!')
-                raise Id3Error, 'Unknown CDM compression: %02x' % self.rawData[0]
-            #@TODO: re-interpret the decompressed frame.
+                # if _c: _coverage('badcdm!')
+                raise Id3Error('Unknown CDM compression: %02x' % self.rawData[0])
+            # @TODO: re-interpret the decompressed frame.
 
         elif self.id in _simpleDataMapping['comment']:
             # comment field
@@ -192,6 +196,7 @@ class _Frame:
 
             self.value = s
 
+
 class Reader:
     """ An ID3 reader.
         Create one on a file object, and then use getValue('TIT2') (for example)
@@ -208,7 +213,7 @@ class Reader:
 
         bCloseFile = False
         # If self.file is a string of some sort, then open it to get a file.
-        if isinstance(self.file, (type(''), type(u''))):
+        if isinstance(self.file, (type(''), type(''))):
             self.file = open(self.file, 'rb')
             bCloseFile = True
 
@@ -223,17 +228,17 @@ class Reader:
             where 0xFF bytes may have had 0x00 bytes stuffed after
             them.  These zero bytes have to be removed transparently.
         """
-        #if _t: _trace("ask %d (%s)" % (num,desc))
+        # if _t: _trace("ask %d (%s)" % (num,desc))
         if num > self.bytesLeft:
-            #if _c: _coverage('long!')
-            raise Id3Error, 'Long read (%s): (%d > %d)' % (desc, num, self.bytesLeft)
+            # if _c: _coverage('long!')
+            raise Id3Error('Long read (%s): (%d > %d)' % (desc, num, self.bytesLeft))
         bytes = self.file.read(num)
         self.bytesLeft -= num
 
         if len(bytes) < num:
-            #if _t: _trace("short read with %d left, %d total" % (self.bytesLeft, self.header.size))
-            #if _c: _coverage('short!')
-            raise Id3Error, 'Short read (%s): (%d < %d)' % (desc, len(bytes), num)
+            # if _t: _trace("short read with %d left, %d total" % (self.bytesLeft, self.header.size))
+            # if _c: _coverage('short!')
+            raise Id3Error('Short read (%s): (%d < %d)' % (desc, len(bytes), num))
 
         if self.header.bUnsynchronized:
             nUnsync = 0
@@ -242,8 +247,8 @@ class Reader:
                 i = bytes.find('\xFF\x00', i)
                 if i == -1:
                     break
-                #if _t: _trace("unsync at %d" % (i+1))
-                #if _c: _coverage('unsyncbyte')
+                # if _t: _trace("unsync at %d" % (i+1))
+                # if _c: _coverage('unsyncbyte')
                 nUnsync += 1
                 # This is a stuffed byte to remove
                 bytes = bytes[:i+1] + bytes[i+2:]
@@ -251,7 +256,7 @@ class Reader:
                 bytes += self.file.read(1)
                 self.bytesLeft -= 1
                 i += 1
-            #if _t: _trace("unsync'ed %d" % (nUnsync))
+            # if _t: _trace("unsync'ed %d" % (nUnsync))
 
         return bytes
 
@@ -261,14 +266,14 @@ class Reader:
 
     def _getSyncSafeInt(self, bytes):
         assert len(bytes) == 4
-        if type(bytes) == type(''):
-            bytes = [ ord(c) for c in bytes ]
+        if isinstance(bytes, str):
+            bytes = [ord(c) for c in bytes]
         return (bytes[0] << 21) + (bytes[1] << 14) + (bytes[2] << 7) + bytes[3]
 
     def _getInteger(self, bytes):
-        i = 0;
-        if type(bytes) == type(''):
-            bytes = [ ord(c) for c in bytes ]
+        i = 0
+        if isinstance(bytes, str):
+            bytes = [ord(c) for c in bytes]
         for b in bytes:
             i = i*256+b
         return i
@@ -318,17 +323,17 @@ class Reader:
         self._readExtHeader = self._pass
 
         if self.header.majorVersion == 2:
-            #if _c: _coverage('id3v2.2.%d' % self.header.revision)
+            # if _c: _coverage('id3v2.2.%d' % self.header.revision)
             self._readFrame = self._readFrame_rev2
         elif self.header.majorVersion == 3:
-            #if _c: _coverage('id3v2.3.%d' % self.header.revision)
+            # if _c: _coverage('id3v2.3.%d' % self.header.revision)
             self._readFrame = self._readFrame_rev3
         elif self.header.majorVersion == 4:
-            #if _c: _coverage('id3v2.4.%d' % self.header.revision)
+            # if _c: _coverage('id3v2.4.%d' % self.header.revision)
             self._readFrame = self._readFrame_rev4
         else:
-            #if _c: _coverage('badmajor!')
-            raise Id3Error, "Unsupported major version: %d" % self.header.majorVersion
+            # if _c: _coverage('badmajor!')
+            raise Id3Error("Unsupported major version: %d" % self.header.majorVersion)
 
         # Interpret the flags
         self._interpretFlags()
@@ -344,7 +349,7 @@ class Reader:
                 self.frames[frame.id] = frame
                 self.allFrames.append(frame)
             else:
-                #if _c: _coverage('padding')
+                # if _c: _coverage('padding')
                 break
 
     def _interpretFlags(self):
@@ -352,11 +357,11 @@ class Reader:
         """
         if self.header.flags & 0x80:
             self.header.bUnsynchronized = True
-            #if _c: _coverage('unsynctag')
+            # if _c: _coverage('unsynctag')
 
         if self.header.majorVersion == 2:
             if self.header.flags & 0x40:
-                #if _c: _coverage('compressed')
+                # if _c: _coverage('compressed')
                 # "Since no compression scheme has been decided yet,
                 # the ID3 decoder (for now) should just ignore the entire
                 # tag if the compression bit is set."
@@ -364,18 +369,18 @@ class Reader:
 
         if self.header.majorVersion >= 3:
             if self.header.flags & 0x40:
-                #if _c: _coverage('extheader')
+                # if _c: _coverage('extheader')
                 if self.header.majorVersion == 3:
                     self._readExtHeader = self._readExtHeader_rev3
                 else:
                     self._readExtHeader = self._readExtHeader_rev4
             if self.header.flags & 0x20:
-                #if _c: _coverage('experimental')
+                # if _c: _coverage('experimental')
                 self.header.bExperimental = True
 
         if self.header.majorVersion >= 4:
             if self.header.flags & 0x10:
-                #if _c: _coverage('footer')
+                # if _c: _coverage('footer')
                 self.header.bFooter = True
 
     def _readExtHeader_rev3(self):
@@ -413,11 +418,11 @@ class Reader:
         self._addV1Frame('v1comment', tag[97:127])
         self._addV1Frame('v1genre', tag[127])
         if tag[125] == '\0' and tag[126] != '\0':
-            #if _c: _coverage('id3v1.1')
+            # if _c: _coverage('id3v1.1')
             self.header.revision = 1
             self._addV1Frame('v1track', str(ord(tag[126])))
         else:
-            #if _c: _coverage('id3v1.0')
+            # if _c: _coverage('id3v1.0')
             pass
         return
 
@@ -427,10 +432,10 @@ class Reader:
         """ Determine if the id bytes make a valid ID3 id.
         """
         for c in id:
-            if not c in self._validIdChars:
-                #if _c: _coverage('bad id')
+            if c not in self._validIdChars:
+                # if _c: _coverage('bad id')
                 return False
-        #if _c: _coverage('id '+id)
+        # if _c: _coverage('id '+id)
         return True
 
     def _readFrame_rev2(self):
@@ -455,17 +460,17 @@ class Reader:
         """
         if self.bytesLeft < 10:
             return None
-        id = self._readBytes(4,'rev3id')
+        id = self._readBytes(4, 'rev3id')
         if len(id) < 4 or not self._isValidId(id):
             self._unreadBytes(len(id))
             return None
-        hstuff = struct.unpack('!BBBBh', self._readBytes(6,'rev3head'))
+        hstuff = struct.unpack('!BBBBh', self._readBytes(6, 'rev3head'))
         frame = _Frame()
         frame.id = id
         frame.size = self._getInteger(hstuff[0:4])
         cbData = frame.size
         frame.flags = hstuff[4]
-        #if _t: _trace('flags = %x' % frame.flags)
+        # if _t: _trace('flags = %x' % frame.flags)
         frame.bTagAlterPreserve = (frame.flags & 0x8000 != 0)
         frame.bFileAlterPreserve = (frame.flags & 0x4000 != 0)
         frame.bReadOnly = (frame.flags & 0x2000 != 0)
@@ -473,17 +478,17 @@ class Reader:
         if frame.bCompressed:
             frame.decompressedSize = self._getInteger(self._readBytes(4, 'decompsize'))
             cbData -= 4
-            #if _c: _coverage('compress')
+            # if _c: _coverage('compress')
         frame.bEncrypted = (frame.flags & 0x0040 != 0)
         if frame.bEncrypted:
             frame.encryptionMethod = self._readBytes(1, 'encrmethod')
             cbData -= 1
-            #if _c: _coverage('encrypt')
+            # if _c: _coverage('encrypt')
         frame.bInGroup = (frame.flags & 0x0020 != 0)
         if frame.bInGroup:
             frame.groupid = self._readBytes(1, 'groupid')
             cbData -= 1
-            #if _c: _coverage('groupid')
+            # if _c: _coverage('groupid')
 
         frame.rawData = self._readBytes(cbData, 'rev3data')
         return frame
@@ -493,11 +498,11 @@ class Reader:
         """
         if self.bytesLeft < 10:
             return None
-        id = self._readBytes(4,'rev4id')
+        id = self._readBytes(4, 'rev4id')
         if len(id) < 4 or not self._isValidId(id):
             self._unreadBytes(len(id))
             return None
-        hstuff = struct.unpack('!BBBBh', self._readBytes(6,'rev4head'))
+        hstuff = struct.unpack('!BBBBh', self._readBytes(6, 'rev4head'))
         frame = _Frame()
         frame.id = id
         frame.size = self._getSyncSafeInt(hstuff[0:4])
@@ -510,25 +515,25 @@ class Reader:
         if frame.bInGroup:
             frame.groupid = self._readBytes(1, 'groupid')
             cbData -= 1
-            #if _c: _coverage('groupid')
+            # if _c: _coverage('groupid')
 
         frame.bCompressed = (frame.flags & 0x0008 != 0)
         if frame.bCompressed:
-            #if _c: _coverage('compress')
+            # if _c: _coverage('compress')
             pass
         frame.bEncrypted = (frame.flags & 0x0004 != 0)
         if frame.bEncrypted:
             frame.encryptionMethod = self._readBytes(1, 'encrmethod')
             cbData -= 1
-            #if _c: _coverage('encrypt')
+            # if _c: _coverage('encrypt')
         frame.bUnsynchronized = (frame.flags & 0x0002 != 0)
         if frame.bUnsynchronized:
-            #if _c: _coverage('unsyncframe')
+            # if _c: _coverage('unsyncframe')
             pass
         if frame.flags & 0x0001:
             frame.datalen = self._getSyncSafeInt(self._readBytes(4, 'datalen'))
             cbData -= 4
-            #if _c: _coverage('datalenindic')
+            # if _c: _coverage('datalenindic')
 
         frame.rawData = self._readBytes(cbData, 'rev3data')
 
@@ -539,10 +544,10 @@ class Reader:
             convenience label ('title', 'performer', ...),
             or return None if there is no such value.
         """
-        if self.frames.has_key(id):
+        if id in self.frames:
             if hasattr(self.frames[id], 'value'):
                 return self.frames[id].value
-        if _simpleDataMapping.has_key(id):
+        if id in _simpleDataMapping:
             for id2 in _simpleDataMapping[id]:
                 v = self.getValue(id2)
                 if v:
@@ -550,42 +555,42 @@ class Reader:
         return None
 
     def getRawData(self, id):
-        if self.frames.has_key(id):
+        if id in self.frames:
             return self.frames[id].rawData
         return None
 
     def dump(self):
         import pprint
-        print "Header:"
-        print self.header
-        print "Frames:"
+        print("Header:")
+        print(self.header)
+        print("Frames:")
         for fr in self.allFrames:
             if len(fr.rawData) > 30:
                 fr.rawData = fr.rawData[:30]
         pprint.pprint(self.allFrames)
         for fr in self.allFrames:
             if hasattr(fr, 'value'):
-                print '%s: %s' % (fr.id, _safestr(fr.value))
+                print('%s: %s' % (fr.id, _safestr(fr.value)))
             else:
-                print '%s= %s' % (fr.id, _safestr(fr.rawData))
-        for label in _simpleDataMapping.keys():
+                print('%s= %s' % (fr.id, _safestr(fr.rawData)))
+        for label in list(_simpleDataMapping.keys()):
             v = self.getValue(label)
             if v:
-                print 'Label %s: %s' % (label, _safestr(v))
+                print('Label %s: %s' % (label, _safestr(v)))
 
     def dumpCoverage(self):
-        feats = _features.keys()
+        feats = list(_features.keys())
         feats.sort()
         for feat in feats:
-            print "Feature %-12s: %d" % (feat, _features[feat])
+            print("Feature %-12s: %d" % (feat, _features[feat]))
 
 if __name__ == '__main__':
     if len(sys.argv) < 2 or '-?' in sys.argv:
-        print "Give me a filename"
+        print("Give me a filename")
     else:
         id3 = Reader(sys.argv[1])
         id3.dump()
-        #if _c: id3.dumpCoverage()
+        # if _c: id3.dumpCoverage()
 
 # History:
 # 20040104: Created.

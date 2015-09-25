@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 """Very basic implementation of the Pipeline/Filters pattern."""
 
+
 class Context (object):
     pass
+
 
 class Stage (object):
     """Interface
@@ -37,4 +39,3 @@ class Pipeline (Stage):
         for stage in self._stages:
             if not stage.execute(context):
                 break
-

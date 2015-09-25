@@ -28,7 +28,7 @@ def search(query, online=False, exts=None, pagenum=1, pagelen=100, sortbytime=Fa
     log.info('Search query : %s' % query)
     
     def is_online(server):
-        if not is_online_cache.has_key(server):
+        if server not in is_online_cache:
             datetime_today = datetime.today()
             delta = datetime_today - server.get_last_seen()
             is_online_cache[server] = delta < timedelta(seconds=310)
@@ -99,12 +99,12 @@ def search(query, online=False, exts=None, pagenum=1, pagelen=100, sortbytime=Fa
                 'size' : int(result['size']),
                 'mtime' : ''
         }
-        if result['mtime'] is not None and result['mtime'] != u'None':
+        if result['mtime'] is not None and result['mtime'] != 'None':
             hit['mtime'] = datetime.strptime(result['mtime'], "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y")
         
         bIsAudio = False
         for extra in['audio_performer', 'audio_title', 'audio_album', 'audio_year']:
-            if result.fields().has_key(extra):
+            if extra in result.fields():
                 if result[extra] != None and result[extra] != "None": #FIXME: where does the None come from?
                     hit[extra] = result[extra]
                     bIsAudio = True

@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 
 import logging
-import os, os.path
+import os
+import os.path
 from datetime import datetime
-from StringIO import StringIO
-from urllib import pathname2url
+from io import BytesIO
+from urllib.request import pathname2url
 
 import pycurl
-import id3reader
+from . import id3reader
 from whoosh import index
 from whoosh.fields import Schema, ID, TEXT
 from whoosh.query import Term
@@ -15,10 +16,11 @@ from whoosh.writing import BufferedWriter, AsyncWriter, IndexingError
 from whoosh.analysis import CharsetFilter, StemmingAnalyzer
 from whoosh.support.charset import accent_map
 
-import persist as ftpvista_persist
-import pipeline
-from scanner import FTPScanner
-from utils import to_unicode
+from . import persist as ftpvista_persist
+from . import pipeline
+from .scanner import FTPScanner
+from functools import reduce
+
 
 class Index(object):
     def __init__(self, directory, persist):
@@ -39,7 +41,7 @@ class Index(object):
         self._last_optimization = None
 
     def open_writer(self):
-        #self._writer = BufferedWriter(self._idx, 120, 4000)
+        # self._writer = BufferedWriter(self._idx, 120, 4000)
         self._writer = AsyncWriter(self._idx)
 
     def get_schema(self):
@@ -64,7 +66,7 @@ class Index(object):
 
     def delete_all_docs(self, server):
         self.open_writer()
-        self._writer.delete_by_term('server_id', to_unicode(server.get_server_id()))
+        self._writer.delete_by_term('server_id', str(server.get_server_id()))
         self._writer.commit()
         self.log.info('All documents of server %s deleted' % server.get_ip_addr())
 
@@ -81,14 +83,14 @@ class Index(object):
 
         def delete_doc(writer, serverid, path):
             writer.delete_by_query(Term('server_id', serverid) &
-                                      Term('path', path))
+                                   Term('path', path))
 
         # Build a {path => (size, mtime)} mapping for quick lookups
         to_index = {}
         for path, size, mtime in current_files:
             to_index[path] = (size, mtime)
 
-        results = self._searcher.documents(server_id=server_id)
+        results = self._searcher.documents(server_id=str(server_id))
         if results:
             for fields in results:
                 indexed_path = fields['path']
@@ -107,12 +109,12 @@ class Index(object):
                         else:
                             # up to date, no need to reindex
                             del to_index[indexed_path]
-                    except ValueError, e:
+                    except ValueError as e:
                         delete_doc(self._writer, server_id, indexed_path)
 
         # return the remaining files
         return [(path, size, mtime)
-                for (path, (size, mtime)) in to_index.iteritems()]
+                for (path, (size, mtime)) in to_index.items()]
 
     def add_document(self, server_id, name, path, size, mtime,
                      audio_album=None, audio_performer=None,
@@ -127,17 +129,17 @@ class Index(object):
         # let's build a dict for that purpose
 
         _, ext = os.path.splitext(name)
-        ext = to_unicode(ext.lstrip('.'))
+        ext = ext.lstrip('.')
 
-        kwargs = {'server_id' : server_id,
-                  'name' : name,
-                  'ext'  : ext,
-                  'path' : path,
-                  'size' : size,
+        kwargs = {'server_id': server_id,
+                  'name': name,
+                  'ext': ext,
+                  'path': path,
+                  'size': size,
                   'mtime': mtime,
-                  'has_id': u'a'}
+                  'has_id': 'a'}
 
-        #add the optional args
+        # Add the optional args
         if audio_album is not None:
             kwargs['audio_album'] = audio_album
 
@@ -156,7 +158,6 @@ class Index(object):
             self.open_writer()
             self._writer.add_document(**kwargs)
 
-
     def commit(self):
         """ Commit the changes in the index and optimize it """
         self.log.info(' -- Begin of Commit -- ')
@@ -165,7 +166,7 @@ class Index(object):
         except IndexingError as e:
             self.open_writer()
             self._writer.commit()
-        #if self._last_optimization is None or self._last_optimization + 3600 < time():
+        # if self._last_optimization is None or self._last_optimization + 3600 < time():
         #    self._idx.optimize()
         #    self._last_optimization = time()
         self.log.info('Index commited')
@@ -178,6 +179,7 @@ class Index(object):
         # self._writer.close()
         """ Close the index """
         self._idx.close()
+
 
 class FileIndexerContext(pipeline.Context):
     """ A pipeline Context object to store the informations about a file"""
@@ -214,43 +216,37 @@ class FetchID3TagsStage(pipeline.Stage):
             -`fetch_size`: number of bytes to dowload (the tags are at the
                            begining of the files)
         """
-        self.log = logging.getLogger('ftpvista.pipe.id3.%s' % \
-                                     server_addr.replace('.', '_'))
+        self.log = logging.getLogger('ftpvista.pipe.id3.%s' % server_addr.replace('.', '_'))
         self._server_addr = server_addr
         self._extensions = extensions
         self._persist = persist
 
-        self._buffer = StringIO()
+        self._buffer = BytesIO()
         self._curl = pycurl.Curl()
-        self._curl.setopt(pycurl.WRITEFUNCTION, self._data_callback)
+        self._curl.setopt(pycurl.WRITEFUNCTION, self._buffer.write)
         self._curl.setopt(pycurl.RANGE, '0-%d' % (fetch_size - 1))
-
-    def _data_callback(self, data):
-        self._buffer.write(data)
 
     def _fetch_data(self, path):
         # Reset the buffer
-        self._buffer = StringIO()
-        self._curl.setopt(pycurl.URL, str('ftp://%s%s' % (self._server_addr,
-                                                           pathname2url(path))))
+        self._buffer = BytesIO()
+        self._curl.setopt(pycurl.URL, 'ftp://{}{}'.format(self._server_addr, pathname2url(path)))
         try:
             self._curl.perform()
             self._buffer.seek(0)
             return True
-        except pycurl.error, e:
-            errno, msg = e
-            self.log.error('%s : %d %s' % (to_unicode(path), errno, msg))
+        except pycurl.error as e:
+            self.log.exception('_fetch_data error', e)
             return False
 
     def execute(self, context):
         path = context.get_path()
 
         # if the file has a candidate extension
-        if any(map(lambda x: path.lower().endswith(x), self._extensions)):
+        if any([path.lower().endswith(x) for x in self._extensions]):
             self.log.debug('Trying to get ID3 data for %s' % path)
 
             # Fetch the data from the server
-            if self._fetch_data(path.encode('utf-8')):
+            if self._fetch_data(path):
                 id3_map = {
                     'album': None,
                     'performer': None,
@@ -263,13 +259,13 @@ class FetchID3TagsStage(pipeline.Stage):
                 try:
                     id3r = id3reader.Reader(self._buffer)
                     for tag in ['album', 'performer', 'title', 'track', 'year', 'genre']:
-                        value = to_unicode(id3r.getValue(tag))
+                        value = id3r.getValue(tag)
                         if value is not None:
                             id3_map[tag] = value
                             # add the tag in the context object
                             context.set_extra_data('audio_%s' % tag, value)
 
-                except (id3reader.Id3Error, UnicodeDecodeError), e:
+                except (id3reader.Id3Error, UnicodeDecodeError) as e:
                     self.log.error('%s : %r' % (path, e))
 
         # Whatever the outcome of this stage,
@@ -281,15 +277,14 @@ class WriteDataStage(pipeline.Stage):
     """ Pipeline stage object that writes the informations in the given index.
     """
     def __init__(self, server_addr, server_id, myindex):
-        self.log = logging.getLogger('ftpvista.pipe.write.%s' % \
-                                     server_addr.replace('.', '_'))
+        self.log = logging.getLogger('ftpvista.pipe.write.%s' % server_addr.replace('.', '_'))
 
         self._server_id = server_id
         self._index = myindex
 
     def execute(self, context):
         def get_extra(key):
-            if context.get_extra_data().has_key(key):
+            if key in context.get_extra_data():
                 return context.get_extra_data()[key]
             else:
                 return None
@@ -297,11 +292,11 @@ class WriteDataStage(pipeline.Stage):
         path = context.get_path()
         self.log.debug("Adding '%s' in the index" % path)
         self._index.add_document(
-                            server_id=to_unicode(self._server_id),
+                            server_id=str(self._server_id),
                             name=os.path.basename(path),
                             path=path,
-                            size=to_unicode(context.get_size()),
-                            mtime=to_unicode(context.get_mtime()),
+                            size=str(context.get_size()),
+                            mtime=str(context.get_mtime()),
                             audio_performer=get_extra('audio_performer'),
                             audio_title=get_extra('audio_title'),
                             audio_album=get_extra('audio_album'),
@@ -317,6 +312,7 @@ def build_indexer_pipeline(server_id, server_addr, myindex, persist):
     pipe.append_stage(WriteDataStage(server_addr, server_id, myindex))
 
     return pipe
+
 
 class IndexUpdateCoordinator(object):
     """Coordinate the scanning and indexing of FTP servers."""
@@ -352,7 +348,7 @@ class IndexUpdateCoordinator(object):
 
         scanner = FTPScanner(server_addr)
         files = scanner.scan(max_depth=self._max_depth)
-        if files == None:
+        if files is None:
             self.log.error('Impossible to scan any file, f**k it.')
             return
         if len(files) == 0:
@@ -362,7 +358,7 @@ class IndexUpdateCoordinator(object):
         # compute the size of all the files found
         size = reduce(lambda total_size, file: total_size + file[1], files, 0)
         self.log.info('Found %d files (%d G) on %s' % (len(files),
-                                                       size / (1073741824), # 1073741824 = 1024 ** 3
+                                                       size / (1073741824),  # 1073741824 = 1024 ** 3
                                                        server_addr))
 
         # Set new informatons about this server in the DB
@@ -370,7 +366,7 @@ class IndexUpdateCoordinator(object):
         server.set_files_size(size)
 
         # filter out the files already indexed and up to date
-        files = self._index.incremental_server_update(to_unicode(server_id), files)
+        files = self._index.incremental_server_update(server_id, files)
 
         # sort the files by path, may reduce the CWDs if needed to fetch infos
         # from the FTP server and makes the potential errors append always in

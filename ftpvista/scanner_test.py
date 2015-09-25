@@ -5,7 +5,7 @@ import unittest
 import logging
 from datetime import datetime
 
-import scanner
+from . import scanner
 
 
 TEST_IP = '10.90.0.1'
@@ -36,19 +36,18 @@ def this_year():
     return datetime.now().year
 
 INTERESTING_FILES = {
-    '/testC.txt' : (6334, datetime(this_year(), 3, 7, 15, 28)),
-    '/testD.bin' : (4392, datetime(this_year(), 3, 2, 18, 34)),
-    '/hda/test.txt' : (6330, datetime(this_year(), 3, 7, 00, 17)),
-    '/testD.bin' : (4392, datetime(this_year(), 3, 2, 18, 34)),
-    '/hda/hda2/test.txt' : (6339, datetime(2006, 7, 11, 0, 0))
+    '/testC.txt': (6334, datetime(this_year(), 3, 7, 15, 28)),
+    '/testD.bin': (4392, datetime(this_year(), 3, 2, 18, 34)),
+    '/hda/test.txt': (6330, datetime(this_year(), 3, 7, 00, 17)),
+    '/testD.bin': (4392, datetime(this_year(), 3, 2, 18, 34)),
+    '/hda/hda2/test.txt': (6339, datetime(2006, 7, 11, 0, 0))
 }
+
 
 def expected_file_tuple(path):
     """Returns a tuple repsenting the file at the given path"""
     size, date = INTERESTING_FILES[path]
     return (path, size, date)
-
-
 
 
 class MockFTP(object):
@@ -77,7 +76,6 @@ class MockFTP(object):
         pass
 
 
-
 class TestFTPScanner(unittest.TestCase):
     def setUp(self):
         self.ftp = scanner.FTPScanner(TEST_IP, ftp_class=MockFTP)
@@ -97,7 +95,6 @@ class TestFTPScanner(unittest.TestCase):
             result = self.ftp.parse_permissions(permissions)
             self.assertEquals(result, expected_result)
 
-
     def testParseDate(self):
         data_set = (
             # with the year
@@ -115,7 +112,6 @@ class TestFTPScanner(unittest.TestCase):
         for date, expected_result in data_set:
             result = self.ftp.parse_date(date)
             self.assertEquals(result, expected_result)
-
 
     def testListRootDirectory(self):
         self.ftp.connect()

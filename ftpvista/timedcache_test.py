@@ -6,7 +6,8 @@
 """
 
 import unittest
-from timedcache import TimedCache
+from .timedcache import TimedCache
+
 
 class FakeClock (object):
     """A Double for faking a clock."""
@@ -21,7 +22,7 @@ class FakeClock (object):
         return self.time
 
 
-class TimedCacheTestCase(unittest.TestCase) :
+class TimedCacheTestCase(unittest.TestCase):
     def setUp(self):
         self.timeout = 20
         self.clock = FakeClock()
@@ -75,5 +76,3 @@ class TimedCacheTestCase(unittest.TestCase) :
         self.cache.clear()
         for value, time in self.test_values:
             self.assert_(value not in self.cache)
-
-

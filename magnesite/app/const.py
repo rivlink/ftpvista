@@ -7,17 +7,17 @@ DISKIMAGES = 5
 
 # Classes
 SPAN_CLASS = {}
-SPAN_CLASS[str(OTHERS)] = u"file"
-SPAN_CLASS[str(VIDEOS)] = u"video"
-SPAN_CLASS[str(AUDIOS)] = u"music"
-SPAN_CLASS[str(IMAGES)] = u"image"
-SPAN_CLASS[str(ARCHIVES)] = u"archive"
-SPAN_CLASS[str(DISKIMAGES)] = u"diskimage"
+SPAN_CLASS[str(OTHERS)] = "file"
+SPAN_CLASS[str(VIDEOS)] = "video"
+SPAN_CLASS[str(AUDIOS)] = "music"
+SPAN_CLASS[str(IMAGES)] = "image"
+SPAN_CLASS[str(ARCHIVES)] = "archive"
+SPAN_CLASS[str(DISKIMAGES)] = "diskimage"
 
 # Extensions categories
 EXT = {}
-EXT[str(VIDEOS)] = [u'avi', u'mpg', u'mkv', u'wmv', u'mp4', u'mov', u'3gp', u'3gp2', u'mpeg', u'mpg', u'mpg2', u'ogm']
-EXT[str(AUDIOS)] = [u'mp3', u'wma', u'cda', u'ogg', u'flac', u'aac', u'aiff', u'm4a', u'wav']
-EXT[str(IMAGES)] = [u'jpep', u'jpg', u'gif', u'png', u'bmp', u'tiff', u'psd']
-EXT[str(DISKIMAGES)] = [u'iso', u'bin', u'cue', u'img', u'mds', u'mdf', u'nrg']
-EXT[str(ARCHIVES)] = [u'rar', u'tar', u'tgz', u'tz', u'yz', u'zz', u'xz', u'war', u'jar', u'ace', u'zip', u'7z', u'gz', u'gzip', u'bz', u'bzip', u'bz2', u'bzip2', u'r00', u'r01', u'deb', u'rpm']
+EXT[str(VIDEOS)] = ['avi', 'mpg', 'mkv', 'wmv', 'mp4', 'mov', '3gp', '3gp2', 'mpeg', 'mpg', 'mpg2', 'ogm']
+EXT[str(AUDIOS)] = ['mp3', 'wma', 'cda', 'ogg', 'flac', 'aac', 'aiff', 'm4a', 'wav']
+EXT[str(IMAGES)] = ['jpep', 'jpg', 'gif', 'png', 'bmp', 'tiff', 'psd']
+EXT[str(DISKIMAGES)] = ['iso', 'bin', 'cue', 'img', 'mds', 'mdf', 'nrg']
+EXT[str(ARCHIVES)] = ['rar', 'tar', 'tgz', 'tz', 'yz', 'zz', 'xz', 'war', 'jar', 'ace', 'zip', '7z', 'gz', 'gzip', 'bz', 'bzip', 'bz2', 'bzip2', 'r00', 'r01', 'deb', 'rpm']

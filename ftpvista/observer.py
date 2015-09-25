@@ -7,6 +7,7 @@ Provides a publish/subscribe mechanism.
 
 """
 
+
 class Observer (object):
     """
         Observer interface.

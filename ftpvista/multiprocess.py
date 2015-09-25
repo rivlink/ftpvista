@@ -4,6 +4,7 @@ from multiprocessing import Process
 import os
 import signal
 
+
 class OwnedProcess(Process):
     """Define a process with a specific UID and GID
     """
