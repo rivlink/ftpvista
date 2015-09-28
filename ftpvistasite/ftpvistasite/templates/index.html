@@ -1,5 +1,5 @@
 {% load custom_filters %}
-{% load url from future %}
+{% load staticfiles %}
 {% load qurl %}
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -7,20 +7,20 @@
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
     <title>FTPVista 3.0</title>
     
-    <link rel="search" type="application/opensearchdescription+xml" title="ftpvista" href="{{ base_url }}{% url 'static' 'resources/search_engine.xml' %}" />
-    <link href="{% url 'static' 'css/jquery.treetable.css' %}" type="text/css" rel="stylesheet" />
-    <link href="{% url 'static' 'css/jquery.multiselect.css' %}" type="text/css" rel="stylesheet" />
-    <link href="{% url 'static' 'css/jquery-ui-1.10.4.custom.css' %}" type="text/css" rel="stylesheet" />
-    <link href="{% url 'static' 'css/global.css' %}" type="text/css" rel="stylesheet" />
-    <script src="{% url 'static' 'js/jquery-1.10.2.min.js' %}" type="text/javascript"></script>
-    <script src="{% url 'static' 'js/jquery-ui-1.10.4.custom.min.js' %}" type="text/javascript"></script>
-    <script src="{% url 'static' 'js/jquery.multiselect.min.js' %}" type="text/javascript"></script>
-    <script src="{% url 'static' 'js/ftpvista.js' %}" type="text/javascript"></script>
+    <link rel="search" type="application/opensearchdescription+xml" title="ftpvista" href="{{ base_url }}{% static 'resources/search_engine.xml' %}" />
+    <link href="{% static 'css/jquery.treetable.css' %}" type="text/css" rel="stylesheet" />
+    <link href="{% static 'css/jquery.multiselect.css' %}" type="text/css" rel="stylesheet" />
+    <link href="{% static 'css/jquery-ui-1.10.4.custom.css' %}" type="text/css" rel="stylesheet" />
+    <link href="{% static 'css/global.css' %}" type="text/css" rel="stylesheet" />
+    <script src="{% static 'js/jquery-1.10.2.min.js' %}" type="text/javascript"></script>
+    <script src="{% static 'js/jquery-ui-1.10.4.custom.min.js' %}" type="text/javascript"></script>
+    <script src="{% static 'js/jquery.multiselect.min.js' %}" type="text/javascript"></script>
+    <script src="{% static 'js/ftpvista.js' %}" type="text/javascript"></script>
 </head>
 <body>
     <script type="text/javascript">
         ftpvista = {
-            search_engine_url: '{{ base_url }}{% url "static" "resources/search_engine.xml" %}',
+            search_engine_url: '{{ base_url }}{% static "resources/search_engine.xml" %}',
             online_url: "{% url 'online' %}",
             results_url: "{% url 'results' %}"
         };

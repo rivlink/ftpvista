@@ -25,11 +25,11 @@ Pour toute autre distrib, vous référez à sa documentation.
 ```
 aptitude install apache2 libapache2-mod-python libapache2-mod-wsgi
 ```
-  * Il faut aussi installer les dépendances python requises (_scapy_ [v2.2 min.], _sqlalchemy_ et _django_ [v1.4 min.]):
+  * Il faut aussi installer les dépendances python requises (_scapy_ [v2.2 min.], _sqlalchemy_ et _django_ [v1.8 min.]):
 ```
 # aptitude install python-scapy python-sqlalchemy python-django python-argparse python-daemon python-pycurl python-mysqldb
 aptitude install python3-sqlalchemy
-pip3 install Whoosh scapy-python3
+pip3 install Whoosh scapy-python3 django
 ```
   * Et configurer _apache_. Pour ce faire il suffit de rajouter les lignes suivantes dans le fichier /etc/apache2/sites-available/default, juste avant la ligne </VirtualHost> (il est aussi possible de créer un autre fichier dans le dossier sites-available et de le linker dans sites-enabled):
 ```apache
@@ -42,12 +42,6 @@ WSGIScriptAlias /ftpvista3 /home/ftpvista/ftpvista3/apache/django.wsgi
 Puis redémarrer Apache
 ```
 sudo service apache restart
-```
-
-#### Whoosh
-La librairie [Whoosh](https://pypi.python.org/pypi/Whoosh/) s'installe simplement via la commande suivante:
-```
-sudo pip install Whoosh
 ```
 
 ### Fichiers de paramétrage

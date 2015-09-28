@@ -6,12 +6,9 @@ import sqlalchemy
 from datetime import datetime, timedelta
 from sqlalchemy import *
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import mapper, sessionmaker
-from sqlalchemy.exc import ArgumentError
-from sqlalchemy.dialects.mysql import TEXT
-from . import id3reader
-from .utils import Servers
-from . import ftp_tools
+from sqlalchemy.orm import sessionmaker
+from utils import Servers
+import ftp_tools
 
 
 def never_date():

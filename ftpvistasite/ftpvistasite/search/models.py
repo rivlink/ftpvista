@@ -1,19 +1,18 @@
 # -*- coding: utf-8 -*-
-import sys
 import logging
-import os.path as path
-sys.path.append(path.abspath(path.dirname(__file__)+'/../../ftpvista/'))
-from django.db import models
+import sys
+from os import path
+sys.path.append(path.abspath(path.join(path.dirname(__file__), '../../../ftpvista/')))
 from django.conf import settings
 from whoosh import index as whoosh_index, sorting
 from whoosh.qparser import *
-from whoosh.query import Regex, Or, And, Term, NullQuery
+from whoosh.query import Or, And, Term, NullQuery
 from datetime import datetime, timedelta
-from app.filenode import *
+from ftpvistasite.app.filenode import *
 from persist import FTPVistaPersist
-from utils import to_unicode
 
 persist = FTPVistaPersist(settings.PERSIST_DB)
+
 
 def search(query, online=False, exts=None, pagenum=1, pagelen=100, sortbytime=False):
     index = whoosh_index.open_dir(settings.WHOOSH_IDX)
