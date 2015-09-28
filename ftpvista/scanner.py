@@ -61,6 +61,8 @@ class FTPScanner(object):
         self.ftp = self.ftp_class(self.host)
         self.ftp.login()
         self.ftp.set_pasv(True)
+        self.ftp.sendcmd("OPTS UTF8 ON")
+        self.ftp.encoding = 'utf-8'
 
     def disconnect(self):
         self.ftp.quit()

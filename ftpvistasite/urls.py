@@ -18,13 +18,8 @@ from django.contrib import admin
 from ftpvistasite.search import views as searchviews
 from ftpvistasite.ajax import views as ajaxviews
 
-"""
 urlpatterns = [
     url(r'^admin/', include(admin.site.urls)),
-]
-"""
-
-urlpatterns = [
     url(r'^$', searchviews.index),
     url(r'^ajax/online$', ajaxviews.online, name='online'),
     url(r'^search/$', searchviews.search, name='search'),

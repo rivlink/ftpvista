@@ -7,8 +7,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import *
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from utils import Servers
-import ftp_tools
+from . import ftp_tools
 
 
 def never_date():
@@ -75,9 +74,6 @@ class FTPServer(Base):
     def set_files_size(self, files_size):
         self.files_size = files_size
 
-    def get_ip_with_name(self):
-        return Servers.get_ip_with_name(self.ip)
-
     def is_online(self):
         return (self.last_seen + timedelta(seconds=310)) >= datetime.now()
 
@@ -103,12 +99,6 @@ class FTPVistaPersist(object):
 
     def set_index(self, index):
         self.index = index
-
-    def get_server_by_name(self, name):
-        ip = Servers.get_ip_from_name(name)
-        if ip is not None:
-            return self.get_server_by_ip(ip, False)
-        return None
 
     def get_server_by_ip(self, ip_addr, create=True):
         server = self.session.query(FTPServer).filter_by(ip=ip_addr).first()

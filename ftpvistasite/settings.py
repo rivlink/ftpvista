@@ -18,7 +18,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Custom FTPVista config
 config = configparser.SafeConfigParser()
-config.read(os.path.join(BASE_DIR, '..', 'ftpvista.conf'))
+config.read(os.path.join(BASE_DIR, 'ftpvista.conf'))
 
 WHOOSH_IDX = config.get('index', 'uri')
 PERSIST_DB = config.get('db', 'uri')
@@ -29,7 +29,7 @@ LOG_PATH = config.get('logs', 'search')
 # See https://docs.djangoproject.com/en/1.8/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config.get('django', 'secret_key')
+SECRET_KEY = config.get('django', 'secret_key', raw=True)
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config.getboolean('django', 'debug')
@@ -40,12 +40,13 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = (
-#    'django.contrib.admin',
-#    'django.contrib.auth',
-#    'django.contrib.contenttypes',
-#    'django.contrib.sessions',
-#    'django.contrib.messages',
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
     'django.contrib.staticfiles',
+    'ftpvistasite',
     'ftpvistasite.search',
     'ftpvistasite.app'
 )
@@ -92,7 +93,7 @@ WSGI_APPLICATION = 'ftpvistasite.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+        'NAME': config.get('db', 'uri').replace('sqlite:///', ''),
     }
 }
 
