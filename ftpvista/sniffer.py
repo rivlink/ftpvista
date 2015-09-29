@@ -9,7 +9,6 @@ from . import pipeline
 from .pipeline import Pipeline
 from .timedcache import TimedCache
 from .ftp_tools import FTPTools
-import multiprocessing
 import time
 
 
@@ -49,7 +48,7 @@ class ARPSniffer (observer.Observable):
         """Run the sniffer"""
         try:
             sniff(filter="arp", prn=self._arp_callback, store=False, stop_filter=self._stopper)
-        except TypeError as e:
+        except TypeError:
             print("Ok! This error likely happened because you are not using scapy version 2.2 or above")
             raise
 
@@ -136,8 +135,7 @@ class PutInQueueStage (pipeline.Stage):
         return True
 
 
-def build_machine_filter_pipeline(queue, blacklist, valid_addr_pattern,
-                                  drop_duplicate_timeout):
+def build_machine_filter_pipeline(queue, blacklist, valid_addr_pattern, drop_duplicate_timeout):
     pipeline = Pipeline()
     pipeline.append_stage(BlacklistFilter(blacklist))
     pipeline.append_stage(ValidAddressFilter(valid_addr_pattern))

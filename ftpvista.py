@@ -6,7 +6,6 @@ import configparser
 import argparse
 import socket
 import os
-import sys
 import traceback
 import shutil
 from datetime import timedelta
@@ -14,8 +13,6 @@ from multiprocessing import Queue
 from ftpvista.index import Index, IndexUpdateCoordinator
 from ftpvista.multiprocess import OwnedProcess
 from ftpvista import persist as ftpvista_persist
-from ftpvista import pipeline
-from ftpvista import observer
 from ftpvista.sniffer import *
 
 os.environ['TZ'] = 'CET'
@@ -146,8 +143,7 @@ def main_daemonized(config, ftpserver_queue):
     min_update_interval = config.getint('indexer', 'min_update_interval')
 
     max_depth = config.getint('indexer', 'max_depth')
-    update_coordinator = IndexUpdateCoordinator(
-                           persist, index, timedelta(hours=min_update_interval), max_depth)
+    update_coordinator = IndexUpdateCoordinator(persist, index, timedelta(hours=min_update_interval), max_depth)
 
     log.info('Init done, running the update coordinator ...')
     while True:
@@ -217,7 +213,7 @@ def main(args):
         elif args.action == 'start-oc':
             OwnedProcess(target=check_online, args=(config,)).start()
         OwnedProcess.joinall()
-    except Exception as e:
+    except Exception:
         logging.basicConfig(level=logging.DEBUG,
                             format='%(asctime)s %(levelname)s:%(name)s:%(message)s',
                             filename=config.get('logs', 'main'))
@@ -232,8 +228,8 @@ def init():
 
     parser.add_argument("-c", "--config", dest="config_file", metavar="FILE", default='/home/ftpvista/ftpvista3/ftpvista.conf', help="Path to the config file")
     subparsers = parser.add_subparsers(dest='action')
-    parser_start = subparsers.add_parser('start', help='Start FTPVista')
-    parser_start_oc = subparsers.add_parser('start-oc', help='Start Online checker')
+    subparsers.add_parser('start', help='Start FTPVista')
+    subparsers.add_parser('start-oc', help='Start Online checker')
     parser_clean = subparsers.add_parser('clean', help='Empty the index, or the database, or everything !')
     parser_clean.add_argument("subject", choices=["db", "index", "all"], help="Empty the index, or the database, or everything !")
     parser_delete = subparsers.add_parser('delete', help='Manually delete a server from the index')

@@ -12,11 +12,9 @@ from . import id3reader
 from whoosh import index
 from whoosh.fields import Schema, ID, TEXT
 from whoosh.query import Term
-from whoosh.writing import BufferedWriter, AsyncWriter, IndexingError
+from whoosh.writing import AsyncWriter, IndexingError
 from whoosh.analysis import CharsetFilter, StemmingAnalyzer
 from whoosh.support.charset import accent_map
-
-from . import persist as ftpvista_persist
 from . import pipeline
 from .scanner import FTPScanner
 from functools import reduce
@@ -47,22 +45,20 @@ class Index(object):
     def get_schema(self):
         analyzer = StemmingAnalyzer('([a-zA-Z0-9])+')
         my_analyzer = analyzer | CharsetFilter(accent_map)
-        return Schema(server_id=ID(stored=True),
-                      has_id=ID(),
-                      path=TEXT(analyzer=my_analyzer, stored=True),
-                      name=TEXT(analyzer=my_analyzer, stored=True),
-                      ext=TEXT(analyzer=my_analyzer, stored=True),
-                      size=ID(stored=True),
-                      mtime=ID(stored=True, sortable=True),
-                      audio_album=TEXT(analyzer=my_analyzer,
-                                       stored=True),
-                      audio_performer=TEXT(analyzer=my_analyzer,
-                                           stored=True),
-                      audio_title=TEXT(analyzer=my_analyzer,
-                                       stored=True),
-                      audio_track=ID(stored=True),
-                      audio_year=ID(stored=True)
-                      )
+        return Schema(
+            server_id=ID(stored=True),
+            has_id=ID(),
+            path=TEXT(analyzer=my_analyzer, stored=True),
+            name=TEXT(analyzer=my_analyzer, stored=True),
+            ext=TEXT(analyzer=my_analyzer, stored=True),
+            size=ID(stored=True),
+            mtime=ID(stored=True, sortable=True),
+            audio_album=TEXT(analyzer=my_analyzer, stored=True),
+            audio_performer=TEXT(analyzer=my_analyzer, stored=True),
+            audio_title=TEXT(analyzer=my_analyzer, stored=True),
+            audio_track=ID(stored=True),
+            audio_year=ID(stored=True)
+        )
 
     def delete_all_docs(self, server):
         self.open_writer()
@@ -82,8 +78,7 @@ class Index(object):
         """
 
         def delete_doc(writer, serverid, path):
-            writer.delete_by_query(Term('server_id', serverid) &
-                                   Term('path', path))
+            writer.delete_by_query(Term('server_id', str(serverid)) & Term('path', path))
 
         # Build a {path => (size, mtime)} mapping for quick lookups
         to_index = {}
@@ -102,19 +97,17 @@ class Index(object):
                 else:
                     size, mtime = to_index[indexed_path]
                     try:
-                        if mtime > datetime.strptime(fields['mtime'],
-                                                     '%Y-%m-%d %H:%M:%S'):
+                        if mtime > datetime.strptime(fields['mtime'], '%Y-%m-%d %H:%M:%S'):
                             # This file has been modified since it was indexed
                             delete_doc(self._writer, server_id, indexed_path)
                         else:
                             # up to date, no need to reindex
                             del to_index[indexed_path]
-                    except ValueError as e:
+                    except ValueError:
                         delete_doc(self._writer, server_id, indexed_path)
 
         # return the remaining files
-        return [(path, size, mtime)
-                for (path, (size, mtime)) in to_index.items()]
+        return [(path, xsize, xmtime) for (path, (xsize, xmtime)) in to_index.items()]
 
     def add_document(self, server_id, name, path, size, mtime,
                      audio_album=None, audio_performer=None,
@@ -154,21 +147,18 @@ class Index(object):
 
         try:
             self._writer.add_document(**kwargs)
-        except IndexingError as e:
+        except IndexingError:
             self.open_writer()
             self._writer.add_document(**kwargs)
 
-    def commit(self):
+    def commit(self, optimize=False):
         """ Commit the changes in the index and optimize it """
         self.log.info(' -- Begin of Commit -- ')
         try:
-            self._writer.commit()
-        except IndexingError as e:
+            self._writer.commit(optimize=optimize)
+        except IndexingError:
             self.open_writer()
-            self._writer.commit()
-        # if self._last_optimization is None or self._last_optimization + 3600 < time():
-        #    self._idx.optimize()
-        #    self._last_optimization = time()
+            self._writer.commit(optimize=optimize)
         self.log.info('Index commited')
 
         self._searcher = self._idx.searcher()
@@ -292,15 +282,16 @@ class WriteDataStage(pipeline.Stage):
         path = context.get_path()
         self.log.debug("Adding '%s' in the index" % path)
         self._index.add_document(
-                            server_id=str(self._server_id),
-                            name=os.path.basename(path),
-                            path=path,
-                            size=str(context.get_size()),
-                            mtime=str(context.get_mtime()),
-                            audio_performer=get_extra('audio_performer'),
-                            audio_title=get_extra('audio_title'),
-                            audio_album=get_extra('audio_album'),
-                            audio_year=get_extra('audio_year'))
+            server_id=str(self._server_id),
+            name=os.path.basename(path),
+            path=path,
+            size=str(context.get_size()),
+            mtime=str(context.get_mtime()),
+            audio_performer=get_extra('audio_performer'),
+            audio_title=get_extra('audio_title'),
+            audio_album=get_extra('audio_album'),
+            audio_year=get_extra('audio_year')
+        )
 
         return True
 
@@ -343,8 +334,7 @@ class IndexUpdateCoordinator(object):
         server_id = server.get_server_id()
 
         # list the files present on the server
-        self.log.info('Starting to scan %s (server id : %d)' % (server_addr,
-                                                                server_id))
+        self.log.info('Starting to scan %s (server id : %d)' % (server_addr, server_id))
 
         scanner = FTPScanner(server_addr)
         files = scanner.scan(max_depth=self._max_depth)
@@ -386,6 +376,6 @@ class IndexUpdateCoordinator(object):
 
         # commit the changes
         self._persist.save()
-        self._index.commit()
+        self._index.commit(optimize=True)
 
         self.log.info('Server %d (%s) updated' % (server_id, server_addr))
