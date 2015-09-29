@@ -9,13 +9,9 @@
     
     <link rel="search" type="application/opensearchdescription+xml" title="ftpvista" href="{{ base_url }}{% static 'resources/search_engine.xml' %}" />
     <link href="{% static 'css/jquery.treetable.css' %}" type="text/css" rel="stylesheet" />
-    <link href="{% static 'css/jquery.multiselect.css' %}" type="text/css" rel="stylesheet" />
-    <link href="{% static 'css/jquery-ui-1.10.4.custom.css' %}" type="text/css" rel="stylesheet" />
-    <link href="{% static 'css/global.css' %}" type="text/css" rel="stylesheet" />
+    <link href="{% static 'css/materialize.min.css' %}" type="text/css" rel="stylesheet" />
     <script src="{% static 'js/jquery-1.10.2.min.js' %}" type="text/javascript"></script>
-    <script src="{% static 'js/jquery-ui-1.10.4.custom.min.js' %}" type="text/javascript"></script>
-    <script src="{% static 'js/jquery.multiselect.min.js' %}" type="text/javascript"></script>
-    <script src="{% static 'js/ftpvista.js' %}" type="text/javascript"></script>
+    <script src="{% static 'js/materialize.min.js' %}" type="text/javascript"></script>
 </head>
 <body>
     <script type="text/javascript">
@@ -26,48 +22,47 @@
             results_url: "{% url 'results' %}"
         };
     </script>
-    <div id="header">
+    <div id="header" class="row">
         <h1>FTPVista</h1>
     </div>
-    <div id="summary"><span>{{ nb_files }} fichiers - Total : {{ files_size|filesizeformat2 }}</span></div>
-    <div id="search">
-            <div id="tabs">
-                <!-- the tabs -->
-                <ul class="tabs">
-                    <li><a id="t1" href="#search">Recherche</a></li>
-                    <li><a id="t2" href="#server-list">Liste des serveurs</a></li>
-                    <li><a id="t3" href="#last">Afficher les derniers fichiers</a></li>
-                </ul>
-                
-                <!-- tab "panes" -->
-                <div id="search" class="pane">
-                    <form method="get" action="{% url 'search' %}">
-                        <p>
-                            {{ form.s }}
-                            <input type="submit" value="Rechercher" />
-                        </p>
-                        
-                        <a href="#" class="plus_sign">- Filtres</a>
-                        <div class="advanced_pane">
-                            <hr/>
-                            {{ form.ft.label_tag }} {{ form.ft }}<br/>
-                            {{ form.os }} {{ form.os.label_tag }}
-                        </div>
-                    </form>
-                </div>
-                <div id="server-list" class="pane">
-                    {% include "online.html" %}
-                </div>
-                <div id="last" class="pane">
-                    <form method="get" action="{% url 'last' %}">
-                        {{ lastform.ft.label_tag }} {{ lastform.ft }}
-                        <input type="submit" value="Rechercher" /><br/>
+    <div id="summary" class="row"><span>{{ nb_files }} fichiers - Total : {{ files_size|filesizeformat2 }}</span></div>
+    <div class="row">
+        <div id="tabs" class="col">
+            <!-- the tabs -->
+            <ul class="tabs">
+                <li class="tab col"><a id="t1" href="#search">Recherche</a></li>
+                <li class="tab col"><a id="t2" href="#server-list">Liste des serveurs</a></li>
+                <li class="tab col"><a id="t3" href="#last">Afficher les derniers fichiers</a></li>
+            </ul>
+            
+            <!-- tab "panes" -->
+            <div id="search" class="pane">
+                <form method="get" action="{% url 'search' %}">
+                    <div class="row">
+                        {{ form.s }}
+                        <input type="submit" value="Rechercher" />
+                    </div>
+                    <a href="#" class="plus_sign">- Filtres</a>
+                    <div class="row">
+                        <hr/>
+                        {{ form.ft.label_tag }} {{ form.ft }}<br/>
                         {{ form.os }} {{ form.os.label_tag }}
-                    </form>
-                </div>
+                    </div>
+                </form>
             </div>
+            <div id="server-list" class="pane">
+                {% include "online.html" %}
+            </div>
+            <div id="last" class="pane">
+                <form method="get" action="{% url 'last' %}">
+                    {{ lastform.ft.label_tag }} {{ lastform.ft }}
+                    <input type="submit" value="Rechercher" /><br/>
+                    {{ form.os }} {{ form.os.label_tag }}
+                </form>
+            </div>
+        </div>
     </div>
-    <div id="search_result">
+    <div id="search_result" class="row">
         {% ifnotequal view 'index' %}
             {% if page > 1 %}
                 <a href="{% qurl request.get_full_path page=page|add:'-1' %}" class="prev">&#8592; page précédente</a>
@@ -86,7 +81,7 @@
             {% endif %}
         {% endifnotequal %}
     </div>
-    <div id="footer">
+    <div id="footer" class="row">
         <p>FTPVista 4.0 by Magne</p>
     </div>
 </body>
