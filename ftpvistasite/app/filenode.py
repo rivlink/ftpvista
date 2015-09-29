@@ -1,9 +1,5 @@
 from . import const as c
 from os import path
-import sys
-sys.path.append(path.abspath(path.join(path.dirname(__file__), '/../../../ftpvista/')))
-# TODO correspondences
-# from utils import Servers
 
 
 class FileNode:
@@ -55,12 +51,6 @@ class FileNode:
         return "ftp://" + self.sFTP
 
     def getServer(self):
-        """
-        correspondences = Servers.get_correspondences()
-        for ip, surnom in correspondences:
-            if self.sFTP == ip:
-                return surnom + "(" + ip + ")"
-        """
         return self.sFTP
 
     def isOnline(self):

@@ -5,7 +5,6 @@
 import ftplib
 import os.path
 import logging
-import socket
 import re
 from datetime import datetime
 
