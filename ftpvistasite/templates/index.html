@@ -8,8 +8,7 @@
     <title>FTPVista 4.0</title>
     
     <link rel="search" type="application/opensearchdescription+xml" title="ftpvista" href="{{ base_url }}{% static 'resources/search_engine.xml' %}" />
-    <link href="{% static 'css/jquery.treetable.css' %}" type="text/css" rel="stylesheet" />
-    <link href="{% static 'css/materialize.min.css' %}" type="text/css" rel="stylesheet" />
+    <link href="{% static 'css/kube.min.css' %}" type="text/css" rel="stylesheet" />
     <link href="{% static 'css/fontello.css' %}" type="text/css" rel="stylesheet" />
     <link href="{% static 'css/ftpvista.css' %}" type="text/css" rel="stylesheet" />
 </head>
@@ -22,105 +21,75 @@
             results_url: "{% url 'results' %}"
         };
     </script>
-    <header>
-        <div class="container">
-            <h1>FTPVista</h1>
-        </div>
+    <header class="unit-push-10 unit-80">
+        <h1>FTPVista</h1>
     </header>
-    <main>
-        <div class="container">
-            <div id="summary" class="row"><span>{{ nb_files }} fichiers - Total : {{ files_size|filesizeformat2 }}</span></div>
-            <div class="row">
-                <div id="tabs" class="col s12">
-                    <!-- the tabs -->
-                    <ul class="tabs">
-                        <li class="tab col"><a id="t1" href="#search">Recherche</a></li>
-                        <li class="tab col"><a id="t2" href="#server-list">Liste des serveurs</a></li>
-                        <li class="tab col"><a id="t3" href="#last">Afficher les derniers fichiers</a></li>
-                    </ul>
-                    
-                    <!-- tab "panes" -->
-                    <div id="search" class="col s12">
-                        <form method="get" action="{% url 'search' %}">
-                            <ul class="collapsible" data-collapsible="expandable">
-                                <li>
-                                    <div class="collapsible-header active">Recherche</div>
-                                    <div class="collapsible-body">
-                                        <div class="row collapsible-content">
-                                            <div class="input-field col s6">
-                                                {{ form.s }}
-                                            </div>
-                                            <div class="input-field col s2">
-                                                <input type="submit" class="btn" value="Rechercher" />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </li>
-                                <li>
-                                    <div class="collapsible-header">Filtres</div>
-                                    <div class="collapsible-body">
-                                        <div class="row collapsible-content">
-                                            <div class="input-field col s6">
-                                                {{ form.ft }}
-                                                <label>{{ form.ft.label }}</label>
-                                            </div>
-                                            <div class="input-field col s6">
-                                                {{ form.os }}
-                                                <label>{{ form.os.label }}</label>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </li>
-                            </ul>
-                        </form>
+    <main class="unit-push-10 unit-80">
+        <div class="row"><span>{{ nb_files }} fichiers - Total : {{ files_size|filesizeformat2 }}</span></div>
+        <div class="row">
+            <nav class="nav-tabs" data-tools="tabs" data-equals="true">
+                <!-- the tabs -->
+                <ul>
+                    <li class="active"><a id="t1" href="#search">Recherche</a></li>
+                    <li><a id="t2" href="#server-list">Liste des serveurs</a></li>
+                    <li><a id="t3" href="#last">Afficher les derniers fichiers</a></li>
+                </ul>
+            </nav>
+            <!-- tab "panes" -->
+            <div id="search">
+                <form method="get" action="{% url 'search' %}" class="forms forms-inline">
+                    <div class="unit-padding">
+                        {{ form.s }}
+                        <input type="submit" class="btn btn-blue" value="Rechercher" />
                     </div>
-                    <div id="server-list" class="col s12">
-                        {% include "online.html" %}
+                    <div data-tools="accordion">
+                        <div href="#panel1" class="accordion-title">Filtres</div>
+                        <div id="panel1" class="accordion-panel">
+                            {{ form.ft.label_tag }}
+                            {{ form.ft }}
+                            {{ form.os }}
+                            {{ form.os.label_tag }}
+                        </div>
                     </div>
-                    <div id="last" class="col s12">
-                        <form method="get" action="{% url 'last' %}">
-                            <div class="row collapsible-content">
-                                <div class="input-field col s6">
-                                    {{ form.ft }}
-                                    <label>{{ form.ft.label }}</label>
-                                </div>
-                                <div class="input-field col s6">
-                                    {{ form.os }}
-                                    <label>{{ form.os.label }}</label>
-                                </div>
-                            </div>
-                        </form>
-                    </div>
+                </form>
+            </div>
+            <div id="server-list" class="unit-padding">
+                {% include "online.html" %}
+            </div>
+            <div id="last" class="unit-padding">
+                <form method="get" action="{% url 'last' %}">
+                    {{ form.ft.label_tag }}
+                    {{ form.ft }}
+                    {{ form.os }}
+                    {{ form.os.label_tag }}
+                </form>
+            </div>
+        </div>
+        <div id="search_result" class="row">
+            {% ifnotequal view 'index' %}
+                {% if page > 1 %}
+                    <a href="{% qurl request.get_full_path page=page|add:'-1' %}" class="prevpage">&#8592; page précédente</a>
+                {% endif %}
+                {% if not is_last_page and file_nodes|length > 0 %}
+                    <a href="{% qurl request.get_full_path page=page|add:'1' %}" class="nextpage">page suivante &#8594;</a>
+                {% endif %}
+                <div class="results">
+                    {% include "search_results.html" %}
                 </div>
-            </div>
-            <div id="search_result" class="row">
-                {% ifnotequal view 'index' %}
-                    {% if page > 1 %}
-                        <a href="{% qurl request.get_full_path page=page|add:'-1' %}" class="prevpage">&#8592; page précédente</a>
-                    {% endif %}
-                    {% if not is_last_page and file_nodes|length > 0 %}
-                        <a href="{% qurl request.get_full_path page=page|add:'1' %}" class="nextpage">page suivante &#8594;</a>
-                    {% endif %}
-                    <div class="results">
-                        {% include "search_results.html" %}
-                    </div>
-                    {% if page > 1 %}
-                        <a href="{% qurl request.get_full_path page=page|add:'-1' %}" class="prevpage">&#8592; page précédente</a>
-                    {% endif %}
-                    {% if not is_last_page and file_nodes|length > 0 %}
-                        <a href="{% qurl request.get_full_path page=page|add:'1' %}" class="nextpage">page suivante &#8594;</a>
-                    {% endif %}
-                {% endifnotequal %}
-            </div>
+                {% if page > 1 %}
+                    <a href="{% qurl request.get_full_path page=page|add:'-1' %}" class="prevpage">&#8592; page précédente</a>
+                {% endif %}
+                {% if not is_last_page and file_nodes|length > 0 %}
+                    <a href="{% qurl request.get_full_path page=page|add:'1' %}" class="nextpage">page suivante &#8594;</a>
+                {% endif %}
+            {% endifnotequal %}
         </div>
     </main>
-    <footer>
-        <div class="container">
-            FTPVista 4.0 by Magne
-        </div>
+    <footer class="unit-push-10 unit-80">
+        FTPVista 4.0 by Magne
     </foolter>
     <script src="{% static 'js/jquery-2.1.4.min.js' %}" type="text/javascript"></script>
-    <script src="{% static 'js/materialize.js' %}" type="text/javascript"></script>
+    <script src="{% static 'js/kube.min.js' %}" type="text/javascript"></script>
     <script src="{% static 'js/ftpvista.js' %}" type="text/javascript"></script>
 </body>
 </html>
