@@ -8,6 +8,12 @@ Il est actuellement en version 3.0 et codé en [Python 2](http:_python.org/).
 ### Prérequis
 Environnement Linux, avec droits d'administration.
 
+### Dev
+
+```
+sudo pip3 install pyftpdlib
+```
+
 ### Préparation de l'environnement
 Pour pouvoir faire fonctionner FTPVista en local sur votre machine, il faut:
   * Créer un utilisateur et un groupe _ftpvista_

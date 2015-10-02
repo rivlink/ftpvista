@@ -16,7 +16,6 @@ def index(request):
     form = SearchForm({'os': True})
     lastform = LastForm()
     return render(request, 'index.html', {'base_url': base_url,
-                                          'sTrId': 'node-',
                                           'servers': models.get_servers(),
                                           'nb_files': models.get_nb_files(),
                                           'files_size': models.get_files_size(),
@@ -56,11 +55,9 @@ def search(request):
         query = ""
         online_seulement = 1
         form = SearchForm({'os': True})
-
     return render(request, 'index.html', {'base_url': base_url,
                                           'query': query,
-                                          'aFileNodes': fileNodes,
-                                          'sTrId': 'node-',
+                                          'file_nodes': fileNodes,
                                           'servers': models.get_servers(),
                                           'nb_files': models.get_nb_files(),
                                           'files_size': models.get_files_size(),
@@ -89,8 +86,7 @@ def last(request):
     is_last_page = fileNodes.pop()  # last element contains a boolean indicating if this is the last page
 
     return render(request, 'index.html', {'base_url': base_url,
-                                          'aFileNodes': fileNodes,
-                                          'sTrId': 'node-',
+                                          'file_nodes': fileNodes,
                                           'servers': models.get_servers(),
                                           'nb_files': models.get_nb_files(),
                                           'files_size': models.get_files_size(),
@@ -112,4 +108,4 @@ def search_results(request):
         hits = list(models.search(query, online=online_seulement, exts=get_all_extensions(filter_list)))
         is_last_page = hits.pop()  # last element contains a boolean indicating if this is the last page
 
-    return render(request, 'search_results.html', {'aFileNodes': hits, 'is_last_page': is_last_page})
+    return render(request, 'search_results.html', {'file_nodes': hits, 'is_last_page': is_last_page})

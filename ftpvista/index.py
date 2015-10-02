@@ -8,7 +8,8 @@ from io import BytesIO
 from urllib.request import pathname2url
 
 import pycurl
-from . import id3reader
+import struct
+from . import tinytag
 from whoosh import index
 from whoosh.fields import Schema, ID, TEXT
 from whoosh.query import Term
@@ -54,7 +55,7 @@ class Index(object):
             size=ID(stored=True),
             mtime=ID(stored=True, sortable=True),
             audio_album=TEXT(analyzer=my_analyzer, stored=True),
-            audio_performer=TEXT(analyzer=my_analyzer, stored=True),
+            audio_artist=TEXT(analyzer=my_analyzer, stored=True),
             audio_title=TEXT(analyzer=my_analyzer, stored=True),
             audio_track=ID(stored=True),
             audio_year=ID(stored=True)
@@ -110,7 +111,7 @@ class Index(object):
         return [(path, xsize, xmtime) for (path, (xsize, xmtime)) in to_index.items()]
 
     def add_document(self, server_id, name, path, size, mtime,
-                     audio_album=None, audio_performer=None,
+                     audio_album=None, audio_artist=None,
                      audio_title=None, audio_year=None):
         """Add a document with the specified fields in the index.
 
@@ -136,8 +137,8 @@ class Index(object):
         if audio_album is not None:
             kwargs['audio_album'] = audio_album
 
-        if audio_performer is not None:
-            kwargs['audio_performer'] = audio_performer
+        if audio_artist is not None:
+            kwargs['audio_artist'] = audio_artist
 
         if audio_title is not None:
             kwargs['audio_title'] = audio_title
@@ -195,33 +196,69 @@ class FileIndexerContext(pipeline.Context):
         return self._extra_data
 
 
+# TODO See https://pypi.python.org/pypi/tinytag/0.9.3 and http://ask.slashdot.org/comments.pl?sid=107983&cid=9185451
 class FetchID3TagsStage(pipeline.Stage):
     """Pipeline stage to find the ID3 tags of audio files."""
 
-    def __init__(self, server_addr, persist, extensions=['mp3'], fetch_size=2048):
+    def __init__(self, server_addr, persist=None, extensions=['mp3']):
         """
         :Parameters:
             -`server_addr`: the server IP address
             -`extensions`: list of file extensions for which to try to get tags
-            -`fetch_size`: number of bytes to dowload (the tags are at the
-                           begining of the files)
         """
         self.log = logging.getLogger('ftpvista.pipe.id3.%s' % server_addr.replace('.', '_'))
         self._server_addr = server_addr
         self._extensions = extensions
         self._persist = persist
-
         self._buffer = BytesIO()
         self._curl = pycurl.Curl()
-        self._curl.setopt(pycurl.WRITEFUNCTION, self._buffer.write)
-        self._curl.setopt(pycurl.RANGE, '0-%d' % (fetch_size - 1))
 
-    def _fetch_data(self, path):
-        # Reset the buffer
+    def _fetch_range(self, arange):
         self._buffer = BytesIO()
+        self._curl.setopt(pycurl.WRITEDATA, self._buffer)
+        self._curl.setopt(pycurl.RANGE, arange)
+        self._curl.perform()
+
+    def _calc_size(self, bytestr, bits_per_byte):
+        # length of some mp3 header fields is described
+        # by "7-bit-bytes" or sometimes 8-bit bytes...
+        ret = 0
+        for b in bytestr:
+            ret <<= bits_per_byte
+            ret += b
+        return ret
+
+    def _get_tag_size(self):
+        self._fetch_range('0-9')
+        header = struct.unpack('3sBBB4B', self._buffer.getbuffer())
+        if header[0] in [b'ID3', b'3DI']:
+            return self._calc_size(header[4:9], 7)
+        return None
+
+    def _fetch_data(self, path, size):
         self._curl.setopt(pycurl.URL, 'ftp://{}{}'.format(self._server_addr, pathname2url(path)))
         try:
-            self._curl.perform()
+            tagsize = self._get_tag_size()
+            if tagsize is not None:
+                # Tags are at the beginning of the file, so download some more bytes
+                self._fetch_range('0-%d' % (tagsize+10))
+            else:
+                # Tags are perhaps at the end of file then
+                self._fetch_range('%d-%d' % (size-10, size))
+                tagsize = self._get_tag_size()
+                if tagsize is not None:
+                    self._fetch_range('%d-%d' % (size-tagsize, size-10))
+                else:
+                    # See if there is ID3v1
+                    self._fetch_range('%d-%d' % (size-128, size))
+                    if self._buffer.getvalue()[0:3] == b'TAG':
+                        id3v1 = self._buffer.getvalue()
+                        self._fetch_range('%d-%d' % (size-138, size-129))
+                        tagsize = self._get_tag_size()
+                        # See if there is ID3v2 before ID3v1
+                        if tagsize is not None:
+                            self._fetch_range('%d-%d' % (size-tagsize-148, size-129))
+                            self._buffer.write(id3v1)  # Concat ID3v1 to ID3v2
             self._buffer.seek(0)
             return True
         except pycurl.error as e:
@@ -230,16 +267,17 @@ class FetchID3TagsStage(pipeline.Stage):
 
     def execute(self, context):
         path = context.get_path()
+        size = context.get_size()
 
         # if the file has a candidate extension
         if any([path.lower().endswith(x) for x in self._extensions]):
             self.log.debug('Trying to get ID3 data for %s' % path)
 
             # Fetch the data from the server
-            if self._fetch_data(path):
+            if self._fetch_data(path, size):
                 id3_map = {
                     'album': None,
-                    'performer': None,
+                    'artist': None,
                     'title': None,
                     'track': None,
                     'year': None,
@@ -247,15 +285,15 @@ class FetchID3TagsStage(pipeline.Stage):
                 }
                 # Look for tags
                 try:
-                    id3r = id3reader.Reader(self._buffer)
-                    for tag in ['album', 'performer', 'title', 'track', 'year', 'genre']:
-                        value = id3r.getValue(tag)
+                    tags = tinytag.ID3(self._buffer, None)
+                    tags.load(tags=True, duration=False, image=False)
+                    for tag in ['album', 'artist', 'title', 'track', 'year', 'genre']:
+                        value = getattr(tags, tag)
                         if value is not None:
                             id3_map[tag] = value
                             # add the tag in the context object
                             context.set_extra_data('audio_%s' % tag, value)
-
-                except (id3reader.Id3Error, UnicodeDecodeError) as e:
+                except (UnicodeDecodeError, struct.error) as e:
                     self.log.error('%s : %r' % (path, e))
 
         # Whatever the outcome of this stage,
@@ -287,7 +325,7 @@ class WriteDataStage(pipeline.Stage):
             path=path,
             size=str(context.get_size()),
             mtime=str(context.get_mtime()),
-            audio_performer=get_extra('audio_performer'),
+            audio_artist=get_extra('audio_artist'),
             audio_title=get_extra('audio_title'),
             audio_album=get_extra('audio_album'),
             audio_year=get_extra('audio_year')

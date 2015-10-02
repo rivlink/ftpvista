@@ -1,0 +1,38 @@
+.collapsible-body .collapsible-content {
+    margin: 0;
+    padding: 1rem;
+}
+
+.dropdown-content li>a, .dropdown-content li>span {
+    padding: 0.3rem;
+}
+
+[type="checkbox"]+label {
+    padding-left: 40px;
+    top: 0.5rem;
+}
+
+.nextpage {
+    float: right;
+}
+
+.prevpage {
+    float: left;
+}
+
+.audio_span{
+    font-size: 0.7em;
+    margin-left: 25px;
+}
+
+.audio_label{
+    color: #999999;
+}
+
+td, .row .col {
+    padding: 0;
+}
+
+h1 {
+    font-weight: bold;
+}

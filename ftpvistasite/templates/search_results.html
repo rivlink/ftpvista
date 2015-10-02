@@ -1,32 +1,47 @@
-    {% if aFileNodes|length > 0 %}
+    {% if file_nodes|length > 0 %}
         <p>
             {% if query %}
                 Recherche : "{{ query }}" - 
             {% else %}
                 Derniers fichiers ajoutés - 
             {% endif %}
-            page {{ page }} <span>({{ aFileNodes|length }} résultat(s) affiché(s))</span>
+            page {{ page }} <span>({{ file_nodes|length }} résultat(s) affiché(s))</span>
         </p>
-        <table id="browser" class="treeTable ui-widget ui-widget-content ui-corner-all{% if is_last_page %} lastpage{% endif %}">
-          <thead class="ui-widget-header ui-helper-reset ui-helper-clearfix">
+        <table id="browser" class="striped">
+          <thead>
             <tr>
-              <th class="ui-state-default">Nom du fichier</th>
-              <th class="ui-state-default">Serveur</th>
-              <th class="ui-state-default">Taille</th>
-              <th class="ui-state-default">Date de création</th>
+              <th>Nom du fichier</th>
+              <th>Serveur</th>
+              <th>Taille</th>
+              <th>Date de création</th>
             </tr>
           </thead>
           <tbody>
-            {% if aFileNodes %}
-                {% for fileNode in aFileNodes %}
-                {% autoescape off %}
-                    <tr id="{{ sTrId }}{{ forloop.counter }}" class="child-of-{{ sTrId }}{{ forloop.counter }}">
-                        <td><span class="{{ fileNode.getSpanClass }}"><a href="{{ fileNode.getEscapedURL }}">{{ fileNode.getSpan }}</a></span></td>
-                        <td><a href="{{ fileNode.getFolderURL }}">{{ fileNode.getServer }}</a></td>
+            {% if file_nodes %}
+                {% for fileNode in file_nodes %}
+                    <tr>
+                        <td>
+                            <span>
+                                <i class="icon {{ fileNode.getIconClass }}"></i>
+                                <a href="{{ fileNode.getURL }}">
+                                    {{fileNode.getFilename}}
+                                    {% if fileNode.isAudio %}
+                                        <br>
+                                        <span class="audio_span">
+                                            <span class="audio_label">Artiste:</span> {{fileNode.getArtist}}
+                                            <span class="audio_label">Album:</span> {{fileNode.getAlbum}}
+                                            <span class="audio_label">Titre:</span> {{fileNode.getTitle}}
+                                        </span>
+                                    {% endif %}
+                                </a>
+                            </span>
+                        </td>
+                        <td>
+                            <a href="{{ fileNode.getFolderURL }}">{{ fileNode.getServer }}</a>
+                        </td>
                         <td>{{ fileNode.getSize|filesizeformat }}</td>
                         <td>{{ fileNode.getDate }}</td>
                     </tr>
-                {% endautoescape %}
                 {% endfor %}
             {% endif %}
           </tbody>

@@ -14,4 +14,4 @@ class LastForm(forms.Form):
 
 
 class SearchForm(LastForm):
-    s = forms.CharField(max_length=100, label='Recherche')
+    s = forms.CharField(max_length=100, label='Recherche', widget=forms.TextInput(attrs={'placeholder': 'Recherche'}))

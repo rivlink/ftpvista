@@ -7,12 +7,12 @@ DISKIMAGES = 5
 
 # Classes
 SPAN_CLASS = {}
-SPAN_CLASS[str(OTHERS)] = "file"
-SPAN_CLASS[str(VIDEOS)] = "video"
-SPAN_CLASS[str(AUDIOS)] = "music"
-SPAN_CLASS[str(IMAGES)] = "image"
-SPAN_CLASS[str(ARCHIVES)] = "archive"
-SPAN_CLASS[str(DISKIMAGES)] = "diskimage"
+SPAN_CLASS[str(OTHERS)] = "icon-file"
+SPAN_CLASS[str(VIDEOS)] = "icon-video"
+SPAN_CLASS[str(AUDIOS)] = "icon-music"
+SPAN_CLASS[str(IMAGES)] = "icon-image"
+SPAN_CLASS[str(ARCHIVES)] = "icon-archive"
+SPAN_CLASS[str(DISKIMAGES)] = "icon-diskimage"
 
 # Extensions categories
 EXT = {}

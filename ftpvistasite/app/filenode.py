@@ -29,20 +29,11 @@ class FileNode:
     def getFilename(self):
         return self.sFilename
 
-    def getSpan(self):
-        if self.isAudio():
-            return (self.sFilename.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;") + "<span class=\"audio_span\"> | <span class=\"audio_label\">Artiste:</span> " + self.sArtist.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;") + " | <span class=\"audio_label\">Album:</span> " + self.sAlbum.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;") + " | <span class=\"audio_label\">Titre:</span> " + self.sTitle.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;") + "</span>")
-        else:
-            return self.sFilename.replace(">", "&gt;").replace("&", "&amp;").replace("<", "&lt;")
-
     def getSize(self):
         return self.sSize
 
     def getURL(self):
         return self.sURL
-
-    def getEscapedURL(self):
-        return self.sURL.replace("&", "&amp;")
 
     def getFolderURL(self):
         return path.dirname(self.sURL)
@@ -59,7 +50,7 @@ class FileNode:
     def isAudio(self):
         return self.bAudio
 
-    def getSpanClass(self):
+    def getIconClass(self):
         root, ext = path.splitext(self.sFilename)
         lext = ext[1:].lower()
         for key in c.EXT:
@@ -90,3 +81,15 @@ class AudioFileNode(FileNode):
         self.sTitle = sTitle
         self.sYear = sYear
         self.bAudio = True
+
+    def getArtist(self):
+        return self.sArtist
+
+    def getAlbum(self):
+        return self.sAlbum
+
+    def getTitle(self):
+        return self.sTitle
+
+    def getYear(self):
+        return self.sYear

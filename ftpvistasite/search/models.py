@@ -36,7 +36,7 @@ def search(query, online=False, exts=None, pagenum=1, pagelen=100, sortbytime=Fa
         return is_online_cache[server]
 
     searcher = index.searcher()
-    parser = MultifieldParser(["name", "path", "audio_performer", "audio_title",
+    parser = MultifieldParser(["name", "path", "audio_artist", "audio_title",
                                "audio_album"],
                               schema=index.schema)
     parser.add_plugin(PhrasePlugin)
@@ -97,16 +97,18 @@ def search(query, online=False, exts=None, pagenum=1, pagelen=100, sortbytime=Fa
             hit['mtime'] = datetime.strptime(result['mtime'], "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y")
 
         bIsAudio = False
-        for extra in['audio_performer', 'audio_title', 'audio_album', 'audio_year']:
+        for extra in['audio_artist', 'audio_title', 'audio_album', 'audio_year']:
             if extra in result.fields():
                 if result[extra] is not None and result[extra] != "None":  # FIXME: where does the None come from?
                     hit[extra] = result[extra]
                     bIsAudio = True
                 else:
                     hit[extra] = ""
+            else:
+                    hit[extra] = ""
 
         if bIsAudio:
-            yield AudioFileNode(server_ip, hit['url'], hit['name'], hit['mtime'], hit['size'], hit['is_online'], hit['audio_performer'], hit['audio_album'], hit['audio_title'], hit['audio_year'])
+            yield AudioFileNode(server_ip, hit['url'], hit['name'], hit['mtime'], hit['size'], hit['is_online'], hit['audio_artist'], hit['audio_album'], hit['audio_title'], hit['audio_year'])
         else:
             yield FileNode(server_ip, hit['url'], hit['name'], hit['mtime'], hit['size'], hit['is_online'])
     yield results.is_last_page()
