@@ -8,7 +8,7 @@
 
 .audio_span {
     font-size: 0.7em;
-    margin-left: 25px;
+    margin-left: 5px;
 }
 
 .audio_label {
@@ -21,4 +21,22 @@ td {
 
 h1 {
     font-weight: bold;
+}
+
+.label_checkbox {
+    margin-top: 0.5em;
+}
+
+.nav-tabs {
+    margin-bottom: 0;
+}
+
+.pane {
+    border-left: 1px solid #ddd;
+    border-right: 1px solid #ddd;
+    border-bottom: 1px solid #ddd;
+}
+
+.pane .forms, .pane .forms .accordion-title, .pane ul, .pane nav {
+    margin-bottom: 0;
 }

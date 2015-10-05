@@ -1,3 +1,7 @@
 $(document).ready(function() {
-    //$('select').material_select();
+    $('select').multipleSelect({
+        placeholder: "Tous les fichiers",
+        selectAllText: "Tous",
+        allSelected: "Tous les fichiers"
+    });
 });

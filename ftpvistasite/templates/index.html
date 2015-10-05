@@ -10,6 +10,7 @@
     <link rel="search" type="application/opensearchdescription+xml" title="ftpvista" href="{{ base_url }}{% static 'resources/search_engine.xml' %}" />
     <link href="{% static 'css/kube.min.css' %}" type="text/css" rel="stylesheet" />
     <link href="{% static 'css/fontello.css' %}" type="text/css" rel="stylesheet" />
+    <link href="{% static 'css/multiple-select.css' %}" type="text/css" rel="stylesheet" />
     <link href="{% static 'css/ftpvista.css' %}" type="text/css" rel="stylesheet" />
 </head>
 <body>
@@ -27,7 +28,7 @@
     <main class="unit-push-10 unit-80">
         <div class="row"><span>{{ nb_files }} fichiers - Total : {{ files_size|filesizeformat2 }}</span></div>
         <div class="row">
-            <nav class="nav-tabs" data-tools="tabs" data-equals="true">
+            <nav class="nav-tabs" data-tools="tabs" data-equals="false">
                 <!-- the tabs -->
                 <ul>
                     <li class="active"><a id="t1" href="#search">Recherche</a></li>
@@ -36,32 +37,34 @@
                 </ul>
             </nav>
             <!-- tab "panes" -->
-            <div id="search">
+            <div id="search" class="pane">
                 <form method="get" action="{% url 'search' %}" class="forms forms-inline">
-                    <div class="unit-padding">
+                    <div class="unit-padding input-groups">
                         {{ form.s }}
-                        <input type="submit" class="btn btn-blue" value="Rechercher" />
+                        <span class="btn-append">
+                            <button class="btn btn-blue">Rechercher</button>
+                        </span>
                     </div>
                     <div data-tools="accordion">
                         <div href="#panel1" class="accordion-title">Filtres</div>
                         <div id="panel1" class="accordion-panel">
                             {{ form.ft.label_tag }}
                             {{ form.ft }}
-                            {{ form.os }}
-                            {{ form.os.label_tag }}
+                            <label class="label_checkbox">{{ form.os }}
+                            {{ form.os.label }}</label>
                         </div>
                     </div>
                 </form>
             </div>
-            <div id="server-list" class="unit-padding">
+            <div id="server-list" class="unit-padding pane">
                 {% include "online.html" %}
             </div>
-            <div id="last" class="unit-padding">
-                <form method="get" action="{% url 'last' %}">
+            <div id="last" class="unit-padding pane">
+                <form method="get" action="{% url 'last' %}" class="forms forms-inline">
                     {{ form.ft.label_tag }}
                     {{ form.ft }}
-                    {{ form.os }}
-                    {{ form.os.label_tag }}
+                    <label class="label_checkbox">{{ form.os }}
+                    {{ form.os.label }}</label>
                 </form>
             </div>
         </div>
@@ -90,6 +93,7 @@
     </foolter>
     <script src="{% static 'js/jquery-2.1.4.min.js' %}" type="text/javascript"></script>
     <script src="{% static 'js/kube.min.js' %}" type="text/javascript"></script>
+    <script src="{% static 'js/jquery.multiple.select.js' %}" type="text/javascript"></script>
     <script src="{% static 'js/ftpvista.js' %}" type="text/javascript"></script>
 </body>
 </html>

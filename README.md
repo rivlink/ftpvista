@@ -10,6 +10,8 @@ Environnement Linux, avec droits d'administration.
 
 ### Dev
 
+python3 manage.py migrate
+python3 manage.py createsuperuser
 ```
 sudo pip3 install pyftpdlib
 ```

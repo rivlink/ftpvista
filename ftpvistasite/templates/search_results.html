@@ -23,17 +23,23 @@
                         <td>
                             <span>
                                 <i class="icon {{ fileNode.getIconClass }}"></i>
-                                <a href="{{ fileNode.getURL }}">
-                                    {{fileNode.getFilename}}
-                                    {% if fileNode.isAudio %}
-                                        <br>
-                                        <span class="audio_span">
-                                            <span class="audio_label">Artiste:</span> {{fileNode.getArtist}}
-                                            <span class="audio_label">Album:</span> {{fileNode.getAlbum}}
-                                            <span class="audio_label">Titre:</span> {{fileNode.getTitle}}
-                                        </span>
-                                    {% endif %}
-                                </a>
+                                <a href="{{ fileNode.getURL }}">{{fileNode.getFilename}}</a>
+                                {% if fileNode.isAudio %}
+                                    <span class="audio_span">
+                                        {% if fileNode.getArtist %}
+                                        <span class="audio_label">Artiste:</span> {{fileNode.getArtist}}
+                                        {% endif %}
+                                        {% if fileNode.getAlbum %}
+                                        <span class="audio_label">Album:</span> {{fileNode.getAlbum}}
+                                            {% if fileNode.getYear %}
+                                            ({{fileNode.getYear}})
+                                            {% endif %}
+                                        {% endif %}
+                                        {% if fileNode.getTitle %}
+                                        <span class="audio_label">Titre:</span> {{fileNode.getTitle}}
+                                        {% endif %}
+                                    </span>
+                                {% endif %}
                             </span>
                         </td>
                         <td>
