@@ -1,0 +1,7 @@
+[uwsgi]
+chdir=%d
+socket=127.0.0.1:15600
+module=ftpvistasite.wsgi:application
+master=True
+plugins=python3
+static-map=/static=%d/ftpvistasite/static

@@ -12,6 +12,7 @@ Environnement Linux, avec droits d'administration.
 
 python3 manage.py migrate
 python3 manage.py createsuperuser
+aptitude install uwsgi uwsgi-plugin-python3
 ```
 sudo pip3 install pyftpdlib
 ```
