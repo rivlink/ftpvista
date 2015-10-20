@@ -21,6 +21,9 @@ td {
 
 h1 {
     font-weight: bold;
+    margin: 0;
+    color: white;
+    text-shadow: 2px 2px 3px #ccc;
 }
 
 .label_checkbox {
@@ -74,4 +77,13 @@ li.online a:before {
 
 li.offline a:before {
      background-color: red;
+}
+
+header {
+    background-color: #ececec;
+    padding: 10px 0;
+}
+
+.row {
+    margin: 2px 0;
 }
