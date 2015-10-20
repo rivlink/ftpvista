@@ -16,7 +16,7 @@
 }
 
 td {
-    padding: 0 !important;
+    padding: 2px !important;
 }
 
 h1 {
@@ -27,16 +27,51 @@ h1 {
     margin-top: 0.5em;
 }
 
-.nav-tabs {
-    margin-bottom: 0;
-}
-
 .pane {
     border-left: 1px solid #ddd;
     border-right: 1px solid #ddd;
     border-bottom: 1px solid #ddd;
 }
 
-.pane .forms, .pane .forms .accordion-title, .pane ul, .pane nav {
+.nav-tabs, .pane .forms, .pane .forms .accordion-title, .pane ul, .pane nav, table {
     margin-bottom: 0;
+}
+
+.input-groups .ms-drop input {
+    width: auto;
+}
+
+.unit-padding-top {
+    padding-top: 1.65em;
+}
+
+.unit-padding-left {
+    padding-left: 1.65em;
+}
+
+.unit-padding-right {
+    padding-right: 1.65em;
+}
+
+.unit-padding-bottom {
+    padding-bottom: 1.65em;
+}
+
+li.offline a:before, li.online a:before {
+    content: '';
+    display: block;
+    width: 10px;
+    height: 10px;
+    float: left;
+    border-radius: 5px;
+    margin-top: 6px;
+    margin-right: 5px;
+}
+
+li.online a:before {
+     background-color: green;
+}
+
+li.offline a:before {
+     background-color: red;
 }

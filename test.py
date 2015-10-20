@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from ftpvista.test import test_id3stage
 from pyftpdlib.authorizers import DummyAuthorizer
 from pyftpdlib.handlers import FTPHandler

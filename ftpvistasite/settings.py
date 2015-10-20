@@ -36,7 +36,6 @@ DEBUG = config.getboolean('django', 'debug')
 
 ALLOWED_HOSTS = []
 
-
 # Application definition
 
 INSTALLED_APPS = (

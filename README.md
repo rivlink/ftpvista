@@ -2,7 +2,7 @@
 
 FTPVista est un moteur d'indexation et de recherche de serveur FTP.
 
-Il est actuellement en version 3.0 et codé en [Python 2](http:_python.org/).
+Il est actuellement en version 4.0 et codé en [Python 3](http:_python.org/) (>=3.4).
 
 ## Ce qu'il faut savoir
 ### Prérequis

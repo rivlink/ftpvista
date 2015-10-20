@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 import logging
@@ -8,6 +8,7 @@ import socket
 import os
 import traceback
 import shutil
+import subprocess
 from datetime import timedelta
 from multiprocessing import Queue
 from ftpvista.index import Index, IndexUpdateCoordinator
@@ -151,19 +152,98 @@ def main_daemonized(config, ftpserver_queue):
         update_coordinator.update_server(ftpserver_queue.get())
 
 
-def sigterm_handler(signum, frame):
-    close_daemon()
-
-
 def launch(config, func, args):
     uid = config.getint('indexer', 'uid')
     gid = config.getint('indexer', 'gid')
     OwnedProcess(uid=uid, gid=gid, target=func, args=args).start()
 
 
+def _q(text):
+    result = input("%s [y/N] " % text)
+    return result.upper() == 'Y'
+
+
+def gen_service(args):
+    fupstart = """description "{description}"
+author "joel.charles91@gmail.com"
+
+start on runlevel [2345]
+stop on runlevel [!2345]
+
+chdir {chdir}
+exec {chdir}/ftpvista.py --config "{chdir}/ftpvista.conf" {start}
+"""
+    fsystemd = """[Unit]
+Description={description}
+
+After=network.target
+
+[Service]
+WorkingDirectory={chdir}
+ExecStart={chdir}/ftpvista.py --config "{chdir}/ftpvista.conf" {start}
+
+[Install]
+WantedBy=multi-user.target
+"""
+    dirname = os.path.dirname(os.path.realpath(__file__))
+    if args.remove:
+        if args.service == 'upstart':
+            if _q('Delete /etc/init/ftpvista.conf and /etc/init/ftpvista-oc.conf ?'):
+                os.remove('/etc/init/ftpvista.conf')
+                os.remove('/etc/init/ftpvista-oc.conf')
+        elif args.service == 'systemd':
+            if _q('Delete /etc/systemd/system/ftpvista.service and /etc/systemd/system/ftpvista-oc.service ?'):
+                print("Disabling services via systemctl")
+                subprocess.call(["systemctl", "disable", "ftpvista"])
+                subprocess.call(["systemctl", "disable", "ftpvista-oc"])
+                os.remove('/etc/systemd/system/ftpvista.service')
+                os.remove('/etc/systemd/system/ftpvista-oc.service')
+        print("Files successfully deleted")
+    else:
+        if args.service == 'upstart':
+            if _q('2 new files will be created: /etc/init/ftpvista.conf and /etc/init/ftpvista-oc.conf. Continue ?'):
+                with open('/etc/init/ftpvista.conf', 'w') as ws:
+                    ws.write(fupstart.format(chdir=dirname, start='start', description='FTPVista'))
+                with open('/etc/init/ftpvista-oc.conf', 'w') as ws:
+                    ws.write(fupstart.format(chdir=dirname, start='start-oc', description='FTPVista online checker'))
+        elif args.service == 'systemd':
+            if _q('2 new files will be created: /etc/systemd/system/ftpvista.service and /etc/systemd/system/ftpvista-oc.service. Continue ?'):
+                with open('/etc/systemd/system/ftpvista.service', 'w') as ws:
+                    ws.write(fsystemd.format(chdir=dirname, start='start', description='FTPVista'))
+                with open('/etc/init/ftpvista-oc.conf', 'w') as ws:
+                    ws.write(fsystemd.format(chdir=dirname, start='start-oc', description='FTPVista online checker'))
+                print("Enabling services via systemctl")
+                subprocess.call(["systemctl", "enable", "ftpvista"])
+                subprocess.call(["systemctl", "enable", "ftpvista-oc"])
+        print("Files successfully installed")
+    return 0
+
+
 def main(args):
+    if args.action == 'gen-service':
+        return gen_service(args)
+
     config = configparser.SafeConfigParser()
     config.read(args.config_file)
+
+    if args.action == 'clean':
+        question = 'Do you really want to clean ftpvista {clean: %s} (make sure there is no running instances of FTPVista) ?' % args.subject
+        fct = None
+        if args.subject == 'all':
+            fct = clean_all
+        elif args.subject == 'db':
+            fct = clean_db
+        elif args.subject == 'index':
+            fct = clean_index
+        else:
+            raise Exception("Invalid value %s" % args.subject)
+        if _q(question):
+            launch(config, fct, (config,))
+        return 0
+    elif args.action == 'delete':
+        if _q('Do you really want to delete server %s ?' % args.server):
+            launch(config, delete_server, (config, args.server))
+        return 0
 
     # From now we can set the application to use a different user id and group id
     # much better for security reasons
@@ -184,28 +264,6 @@ def main(args):
     scanner_interval = config.getint('indexer', 'scanner_interval')
     subnet = config.get('indexer', 'subnet')
 
-    if args.action == 'clean':
-        question = 'Do you really want to clean ftpvista {clean: %s} (make sure there is no running instances of FTPVista) ? [y/N] : ' % args.subject
-        fct = None
-        if args.subject == 'all':
-            fct = clean_all
-        elif args.subject == 'db':
-            fct = clean_db
-        elif args.subject == 'index':
-            fct = clean_index
-        else:
-            raise Exception("Invalid value %s" % args.subject)
-        result = input(question)
-        if result.upper() == 'Y':
-            launch(config, fct, (config,))
-        return 0
-    elif args.action == 'delete':
-        question = 'Do you really want to delete server %s ? [y/N] : ' % args.server
-        result = input(question)
-        if result.upper() == 'Y':
-            launch(config, delete_server, (config, args.server))
-        return 0
-
     try:
         if args.action == 'start':
             OwnedProcess(uid=uid, gid=gid, target=main_daemonized, args=(config, ftpserver_queue)).start()
@@ -219,24 +277,30 @@ def main(args):
                             filename=config.get('logs', 'main'))
         log = logging.getLogger('ftpvista.main')
         log.error('Error in main : %s', traceback.format_exc())
-        close_daemon()
         raise
 
 
 def init():
+    if os.getuid() != 0:
+        print("You must be root in order to run FTPVista. Exiting.")
+        exit(1)
+
     parser = argparse.ArgumentParser(description="FTPVista 4.0")
 
     parser.add_argument("-c", "--config", dest="config_file", metavar="FILE", default='/home/ftpvista/ftpvista3/ftpvista.conf', help="Path to the config file")
     subparsers = parser.add_subparsers(dest='action')
+    parser_service = subparsers.add_parser('gen-service', help='Generate service script for upstart or systemd')
+    parser_service.add_argument("service", choices=["upstart", "systemd"])
+    parser_service.add_argument("--remove", action="store_true", help="If this option is specified, services files are removed instead of being installed")
     subparsers.add_parser('start', help='Start FTPVista')
-    subparsers.add_parser('start-oc', help='Start Online checker')
+    subparsers.add_parser('start-oc', help='Start online checker')
     parser_clean = subparsers.add_parser('clean', help='Empty the index, or the database, or everything !')
     parser_clean.add_argument("subject", choices=["db", "index", "all"], help="Empty the index, or the database, or everything !")
     parser_delete = subparsers.add_parser('delete', help='Manually delete a server from the index')
     parser_delete.add_argument("server", help="IP (or name from correspondences file) of the server to delete")
 
     args = parser.parse_args()
-    main(args)
+    return main(args)
 
 if __name__ == '__main__':
     init()

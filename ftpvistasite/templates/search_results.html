@@ -1,12 +1,5 @@
+{% load custom_filters %}
     {% if file_nodes|length > 0 %}
-        <p>
-            {% if query %}
-                Recherche : "{{ query }}" - 
-            {% else %}
-                Derniers fichiers ajoutés - 
-            {% endif %}
-            page {{ page }} <span>({{ file_nodes|length }} résultat(s) affiché(s))</span>
-        </p>
         <table id="browser" class="table-bordered table-stripped table-hovered">
           <thead>
             <tr>
@@ -23,7 +16,7 @@
                         <td>
                             <span>
                                 <i class="icon {{ fileNode.getIconClass }}"></i>
-                                <a href="{{ fileNode.getURL }}">{{fileNode.getFilename}}</a>
+                                <a download href="{{ fileNode.getURL }}">{{fileNode.getFilename}}</a>
                                 {% if fileNode.isAudio %}
                                     <span class="audio_span">
                                         {% if fileNode.getArtist %}
@@ -43,7 +36,7 @@
                             </span>
                         </td>
                         <td>
-                            <a href="{{ fileNode.getFolderURL }}">{{ fileNode.getServer }}</a>
+                            <a href="{{ fileNode.getFolderURL }}">{{ fileNode.getServer|ipwithname }}</a>
                         </td>
                         <td>{{ fileNode.getSize|filesizeformat }}</td>
                         <td>{{ fileNode.getDate }}</td>

@@ -45,7 +45,8 @@ class FTPServer(Base):
         self.last_seen = time
 
     def update_last_scanned(self, time=None):
-        """Same as 'update_last_seen' method"""
+        """As default value is evaluated only once, and is shared between calls,
+        the 'time' variable must be instanciated each time the method is called"""
         if time is None:
             time = datetime.now()
         self.last_scanned = time
@@ -76,11 +77,6 @@ class FTPServer(Base):
 
     def is_online(self):
         return (self.last_seen + timedelta(seconds=310)) >= datetime.now()
-
-    def get_online_class(self):
-        if self.is_online():
-            return "online"
-        return "offline"
 
 
 class FTPVistaPersist(object):
@@ -121,7 +117,7 @@ class FTPVistaPersist(object):
         """ Launch a check every 'interval' (in seconds) to verify if servers in database are online.
             If a server have not been seen since 'purgeinterval' days, it is deleted from the index and the database.
         """
-        self.log = logging.getLogger('ftpvista.nmaps')
+        self.log = logging.getLogger('ftpvista.oc')
         while True:
             self.check(purgeinterval)
             time.sleep(int(interval))
@@ -134,11 +130,11 @@ class FTPVistaPersist(object):
             if self._tools.is_ftp_open(server.get_ip_addr()):
                 last_seen = server.last_seen
                 server.update_last_seen()
-                self.log.info('Server %s is online. Last seen value was %s' % (server.get_ip_addr(), last_seen))
+                self.log.debug('Server %s is online. Last seen value was %s' % (server.get_ip_addr(), last_seen))
             elif purgeinterval is not None and (server.get_last_seen() + deltapurgeinterval) < datetime.now():
                 self.delete_server(server)
         self.save()
-        self.log.info('Online information saved !')
+        self.log.debug('Online information saved !')
 
     def delete_server(self, server):
         """ Delete server files from index """

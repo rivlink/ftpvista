@@ -2,9 +2,9 @@
 <nav class="nav nav-stats">
     <ul class="server_list">
         {% for server in servers %}
-            <li class="{{ server.get_online_class }}">
-                <a href="ftp://{{ server.get_ip_addr }}">{{ server.get_ip_addr|ipwithname }}</a>
-                <sup>{{ server.get_nb_files }} fichiers - {{ server.get_files_size|filesizeformat2 }}</sup>
+            <li class="{{ server.is_online|yesno:'online,offline' }}">
+                <a title="{{ server.is_online|yesno:'Online,Offline' }}" href="ftp://{{ server.get_ip_addr }}">{{ server.get_ip_addr|ipwithname }}</a>
+                <sup>{{ server.get_nb_files }} fichiers - {{ server.get_files_size|filesizeformat }}</sup>
             </li>
         {% endfor %}
     </ul>
