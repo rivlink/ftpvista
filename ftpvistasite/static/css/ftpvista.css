@@ -23,7 +23,7 @@ h1 {
     font-weight: bold;
     margin: 0;
     color: white;
-    text-shadow: 2px 2px 3px #ccc;
+    text-shadow: 2px 2px 3px #bbb;
 }
 
 .label_checkbox {
@@ -80,7 +80,7 @@ li.offline a:before {
 }
 
 header {
-    background-color: #ececec;
+    background-color: #ddd;
     padding: 10px 0;
 }
 
