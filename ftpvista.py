@@ -8,7 +8,6 @@ import socket
 import os
 import traceback
 import shutil
-import subprocess
 from datetime import timedelta
 from multiprocessing import Queue
 from ftpvista.index import Index, IndexUpdateCoordinator
@@ -163,66 +162,7 @@ def _q(text):
     return result.upper() == 'Y'
 
 
-def gen_service(args):
-    fupstart = """description "{description}"
-author "joel.charles91@gmail.com"
-
-start on runlevel [2345]
-stop on runlevel [!2345]
-
-chdir {chdir}
-exec {chdir}/ftpvista.py --config "{chdir}/ftpvista.conf" {start}
-"""
-    fsystemd = """[Unit]
-Description={description}
-
-After=network.target
-
-[Service]
-WorkingDirectory={chdir}
-ExecStart={chdir}/ftpvista.py --config "{chdir}/ftpvista.conf" {start}
-
-[Install]
-WantedBy=multi-user.target
-"""
-    dirname = os.path.dirname(os.path.realpath(__file__))
-    if args.remove:
-        if args.service == 'upstart':
-            if _q('Delete /etc/init/ftpvista.conf and /etc/init/ftpvista-oc.conf ?'):
-                os.remove('/etc/init/ftpvista.conf')
-                os.remove('/etc/init/ftpvista-oc.conf')
-        elif args.service == 'systemd':
-            if _q('Delete /etc/systemd/system/ftpvista.service and /etc/systemd/system/ftpvista-oc.service ?'):
-                print("Disabling services via systemctl")
-                subprocess.call(["systemctl", "disable", "ftpvista"])
-                subprocess.call(["systemctl", "disable", "ftpvista-oc"])
-                os.remove('/etc/systemd/system/ftpvista.service')
-                os.remove('/etc/systemd/system/ftpvista-oc.service')
-        print("Files successfully deleted")
-    else:
-        if args.service == 'upstart':
-            if _q('2 new files will be created: /etc/init/ftpvista.conf and /etc/init/ftpvista-oc.conf. Continue ?'):
-                with open('/etc/init/ftpvista.conf', 'w') as ws:
-                    ws.write(fupstart.format(chdir=dirname, start='start', description='FTPVista'))
-                with open('/etc/init/ftpvista-oc.conf', 'w') as ws:
-                    ws.write(fupstart.format(chdir=dirname, start='start-oc', description='FTPVista online checker'))
-        elif args.service == 'systemd':
-            if _q('2 new files will be created: /etc/systemd/system/ftpvista.service and /etc/systemd/system/ftpvista-oc.service. Continue ?'):
-                with open('/etc/systemd/system/ftpvista.service', 'w') as ws:
-                    ws.write(fsystemd.format(chdir=dirname, start='start', description='FTPVista'))
-                with open('/etc/init/ftpvista-oc.conf', 'w') as ws:
-                    ws.write(fsystemd.format(chdir=dirname, start='start-oc', description='FTPVista online checker'))
-                print("Enabling services via systemctl")
-                subprocess.call(["systemctl", "enable", "ftpvista"])
-                subprocess.call(["systemctl", "enable", "ftpvista-oc"])
-        print("Files successfully installed")
-    return 0
-
-
 def main(args):
-    if args.action == 'gen-service':
-        return gen_service(args)
-
     config = configparser.SafeConfigParser()
     config.read(args.config_file)
 
@@ -281,25 +221,27 @@ def main(args):
 
 
 def init():
-    if os.getuid() != 0:
-        print("You must be root in order to run FTPVista. Exiting.")
-        exit(1)
-
+    dirname = os.path.dirname(os.path.abspath(__file__))
     parser = argparse.ArgumentParser(description="FTPVista 4.0")
-
-    parser.add_argument("-c", "--config", dest="config_file", metavar="FILE", default='/home/ftpvista/ftpvista3/ftpvista.conf', help="Path to the config file")
+    parser.add_argument("-c", "--config", dest="config_file", metavar="FILE", default=os.path.join(dirname, 'ftpvista.conf'), help="Path to the config file")
     subparsers = parser.add_subparsers(dest='action')
-    parser_service = subparsers.add_parser('gen-service', help='Generate service script for upstart or systemd')
-    parser_service.add_argument("service", choices=["upstart", "systemd"])
-    parser_service.add_argument("--remove", action="store_true", help="If this option is specified, services files are removed instead of being installed")
+    # start
     subparsers.add_parser('start', help='Start FTPVista')
+    # start-oc
     subparsers.add_parser('start-oc', help='Start online checker')
+    # clean
     parser_clean = subparsers.add_parser('clean', help='Empty the index, or the database, or everything !')
     parser_clean.add_argument("subject", choices=["db", "index", "all"], help="Empty the index, or the database, or everything !")
+    # delete
     parser_delete = subparsers.add_parser('delete', help='Manually delete a server from the index')
     parser_delete.add_argument("server", help="IP (or name from correspondences file) of the server to delete")
 
     args = parser.parse_args()
+
+    if os.getuid() != 0:
+        print("You must be root in order to run FTPVista. Exiting.")
+        exit(1)
+
     return main(args)
 
 if __name__ == '__main__':

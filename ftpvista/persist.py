@@ -106,6 +106,9 @@ class FTPVistaPersist(object):
 
         return server
 
+    def expire_all(self):
+        self.session.expire_all()
+
     def get_server(self, server_id):
         server = self.session.query(FTPServer).filter_by(id=server_id).first()
         return server
@@ -132,6 +135,7 @@ class FTPVistaPersist(object):
                 server.update_last_seen()
                 self.log.debug('Server %s is online. Last seen value was %s' % (server.get_ip_addr(), last_seen))
             elif purgeinterval is not None and (server.get_last_seen() + deltapurgeinterval) < datetime.now():
+                self.log.debug('Server %s has been offline for more than %d days. It will be deleted' % (server.get_ip_addr(), purgeinterval))
                 self.delete_server(server)
         self.save()
         self.log.debug('Online information saved !')

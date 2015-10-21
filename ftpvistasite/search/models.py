@@ -23,6 +23,8 @@ def search(query, online=False, exts=None, pagenum=1, pagelen=100, sortbytime=Fa
     log = logging.getLogger('ftpvista_search')
     log.debug('Search query : %s' % query)
 
+    persist.expire_all()
+
     def is_online(server):
         if server not in is_online_cache:
             datetime_today = datetime.today()
@@ -51,7 +53,7 @@ def search(query, online=False, exts=None, pagenum=1, pagelen=100, sortbytime=Fa
         online_servers_id = []
         for server in persist.get_servers():
             if is_online(server):
-                online_servers_id.append(Term("server_id", to_unicode(server.get_server_id())))
+                online_servers_id.append(Term("server_id", str(server.get_server_id())))
         if len(online_servers_id) > 0:
             searchfilter = Or(online_servers_id)
         else:
@@ -129,4 +131,5 @@ def get_files_size():
 
 
 def get_servers():
+    persist.expire_all()
     return persist.get_servers()

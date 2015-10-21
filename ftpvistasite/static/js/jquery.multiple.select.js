@@ -11,13 +11,11 @@
 
     function MultipleSelect($el, options) {
         var that = this,
-            name = $el.attr('name') || options.name || ''
+            name = $el.attr('name') || options.name || '';
 
         var originalParentStyle = $el.parent().attr('style') || '';
         $el.parent().hide();
-        var elWidth = $el.css("width");
         $el.parent().show().attr('style', originalParentStyle);
-        if (elWidth=="0px") {elWidth = $el.outerWidth()+20}
 
         this.$el = $el.hide();
         this.options = options;
@@ -36,7 +34,7 @@
         if (this.$el.prop('disabled')) {
             this.$choice.addClass('disabled');
         }
-        this.$parent.css('width', options.width || elWidth);
+        this.$parent.css('width', '100%');
 
         if (!this.options.keepOpen) {
             $('body').click(function (e) {
