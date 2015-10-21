@@ -40,9 +40,7 @@ def delete_server(config, sserver):
     index = get_index(config, persist)
     persist.set_index(index)
 
-    server = persist.get_server_by_name(sserver)
-    if server is None:
-        server = persist.get_server_by_ip(sserver, False)
+    server = persist.get_server_by_ip(sserver, False)
     if server is not None:
         log.debug('Server found for deletion. Starting process.')
         persist.delete_server(server)
@@ -234,7 +232,7 @@ def init():
     parser_clean.add_argument("subject", choices=["db", "index", "all"], help="Empty the index, or the database, or everything !")
     # delete
     parser_delete = subparsers.add_parser('delete', help='Manually delete a server from the index')
-    parser_delete.add_argument("server", help="IP (or name from correspondences file) of the server to delete")
+    parser_delete.add_argument("server", help="IP of the server to delete")
 
     args = parser.parse_args()
 

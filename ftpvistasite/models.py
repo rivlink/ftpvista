@@ -13,5 +13,12 @@ class Correspondence(models.Model):
         except ObjectDoesNotExist:
             return None
 
+    @staticmethod
+    def getbyname(name):
+        try:
+            return Correspondence.objects.get(name=name)
+        except ObjectDoesNotExist:
+            return None
+
     def __str__(self):
         return "{} ({})".format(self.name, self.ip)

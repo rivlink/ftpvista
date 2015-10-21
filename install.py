@@ -17,7 +17,6 @@ def _stat_proc1exe():
 def _command_exists(command):
     with open(os.devnull, "w") as f:
         return subprocess.call(["which", command], stdout=f) == 0
-    return False
 
 
 def init_config(args):
@@ -192,4 +191,4 @@ def init():
     return args.func(args)
 
 if __name__ == '__main__':
-    init()
+    exit(init())
