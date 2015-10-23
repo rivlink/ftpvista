@@ -13,8 +13,8 @@ import readline
 import ipaddress
 import subprocess
 import configparser
-from manage import execute
 from colorama import init as colorama_init, Fore
+from django.core.management import execute_from_command_line
 
 
 def default(func):
@@ -255,10 +255,14 @@ def uninstall_services(args):
     print(i('Services'))
     a = Ask()
     if not hasattr(args, 'service') or args.service == 'upstart':
-        if os.path.isfile('/etc/init/ftpvista.conf') or os.path.isfile('/etc/init/ftpvista-oc.conf'):
-            if a.ask(YesNo('Delete /etc/init/ftpvista.conf and /etc/init/ftpvista-oc.conf ?')):
-                os.remove('/etc/init/ftpvista.conf')
-                os.remove('/etc/init/ftpvista-oc.conf')
+        if os.path.isfile('/etc/init/ftpvista.conf') or os.path.isfile('/etc/init/ftpvista-oc.conf') or os.path.isfile('/etc/init/ftpvista-uwsgi.conf'):
+            if a.ask(YesNo('Delete /etc/init/ftpvista.conf, /etc/init/ftpvista-oc.conf and /etc/init/ftpvista-uwsgi.conf ?')):
+                if os.path.exists('/etc/init/ftpvista.conf'):
+                    os.remove('/etc/init/ftpvista.conf')
+                if os.path.exists('/etc/init/ftpvista-oc.conf'):
+                    os.remove('/etc/init/ftpvista-oc.conf')
+                if os.path.exists('/etc/init/ftpvista-uwsgi.conf'):
+                    os.remove('/etc/init/ftpvista-uwsgi.conf')
                 print(s("Files successfully deleted."))
         else:
             print('Nothing to delete for service upstart.')
@@ -268,12 +272,66 @@ def uninstall_services(args):
                 print("Disabling services via systemctl")
                 subprocess.call(["systemctl", "disable", "ftpvista"])
                 subprocess.call(["systemctl", "disable", "ftpvista-oc"])
-                os.remove('/etc/systemd/system/ftpvista.service')
-                os.remove('/etc/systemd/system/ftpvista-oc.service')
+                subprocess.call(["systemctl", "disable", "ftpvista-uwsgi"])
+                if os.path.exists('/etc/systemd/system/ftpvista.service'):
+                    os.remove('/etc/systemd/system/ftpvista.service')
+                if os.path.exists('/etc/systemd/system/ftpvista-oc.service'):
+                    os.remove('/etc/systemd/system/ftpvista-oc.service')
+                if os.path.exists('/etc/systemd/system/ftpvista-uwsgi.service'):
+                    os.remove('/etc/systemd/system/ftpvista-uwsgi.service')
                 print(s("Files successfully deleted."))
         else:
             print('Nothing to delete for service systemd.')
     return 0
+
+
+def install_uwsgi_services(args):
+    if args.service != 'skip':
+        fupstart = """description "FTPVista uwsgi instance"
+author "joel.charles91@gmail.com"
+
+start on runlevel [2345]
+stop on runlevel [06]
+console log
+chdir {chdir}
+env LANG="en_US.UTF-8"
+setuid {uid}
+setgid {gid}
+
+respawn
+
+exec uwsgi --ini {root}/festival.uwsgi
+"""
+        fsystemd = """[Unit]
+Description=FTPVista uwsgi instance
+After=network.target
+
+[Service]
+User={uid}
+Group={gid}
+ExecStart=/usr/bin/uwsgi --ini {root}/festival.uwsgi
+WorkingDirectory={chdir}
+Restart=always
+KillSignal=SIGQUIT
+Type=notify
+
+[Install]
+WantedBy=multi-user.target
+"""
+        dirname = os.path.dirname(os.path.realpath(__file__))
+        a = Ask()
+        if args.service == 'systemd':
+            if a.ask(YesNo('Create /etc/systemd/system/ftpvista-uwsgi.service ?')):
+                with open('/etc/systemd/system/ftpvista-uwsgi.service', 'w') as ws:
+                    ws.write(fsystemd.format(chdir=dirname, root=args.root, uid=args.uid, gid=args.gid))
+                print("Enabling uwsgi service via systemctl.")
+                subprocess.call(["systemctl", "enable", "ftpvista-uwsgi"])
+                print(s("File successfully installed."))
+        elif args.service == 'upstart':
+            if a.ask(YesNo('Create /etc/init/ftpvista-uwsgi.conf ?')):
+                with open('/etc/init/ftpvista-uwsgi.conf', 'w') as ws:
+                    ws.write(fupstart.format(chdir=dirname, root=args.root, uid=args.uid, gid=args.gid))
+                print(s("File successfully installed."))
 
 
 def install_services(args):
@@ -362,7 +420,7 @@ def install_logrotate(args):
 
 
 def install_user(args):
-    print(i('Create user'))
+    print(i('Create/Use user'))
     a = Ask()
     with open(os.devnull, "w") as f:
         # Group
@@ -423,7 +481,10 @@ def install_configuration(args):
     config = configparser.SafeConfigParser()
     config.read(os.path.join(dirname, 'ftpvista.default.conf'))
     # Ask for root directory
-    default_root = os.path.join('/home', args.uname, 'ftpvista')
+    if hasattr(args, 'uname'):
+        default_root = os.path.join('/home', args.uname, 'ftpvista')
+    else:
+        default_root = None
     path_valid = False
     while not path_valid:
         chosen_root = a.ask(Path('FTPVista root folder', default=default_root))
@@ -477,10 +538,36 @@ def uninstall_configuration(args):
         print(args.home, 'not deleted.')
 
 
-def init_django():
-    execute(['migrate', 'migrate'])
-    execute(['migrate', 'createsuperuser'])
-    print(s('Django initialisation successful.'))
+def install_uwsgi(args):
+    fuwsgi = """[uwsgi]
+chdir={chdir}
+socket=127.0.0.1:15600
+module=ftpvistasite.wsgi:application
+master=True
+plugins=python3
+static-map=/static=%d/ftpvistasite/static
+config_path={config_path}"""
+    dirname = os.path.dirname(os.path.abspath(__file__))
+    uwsgi_path = os.path.join(args.root, 'ftpvista.uwsgi')
+    with open(uwsgi_path, 'w') as wf:
+        wf.write(fuwsgi.format(chdir=dirname, config_path=args.config_path))
+    print(s('{} successfully created'.format(uwsgi_path)))
+
+
+def configure_apache():
+    print(w(os.linesep+'Next step must be done manually'))
+    print("""Add this snippet into your apache VirtualHost:
+ProxyPass /ftpvista uwsgi://127.0.0.1:15600/""")
+
+
+def init_django(args):
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "ftpvistasite.settings")
+    os.environ.setdefault("CONFIG_PATH", args.config_path)
+    print(i('Django database'))
+    execute_from_command_line(['migrate', 'migrate'])
+    print(i('Django admin user'))
+    execute_from_command_line(['migrate', 'createsuperuser'])
+    os.chown(os.path.join(args.root, 'ftpvista.db'), args.uid, args.gid)
 
 
 def check_home(args):
@@ -498,12 +585,23 @@ def main(args):
             install_user(args)
         if args.configuration or args.all:
             install_configuration(args)
-        if args.website or args.all:
-            init_django()
         if args.services or args.all:
+            if args.home is not None:
+                args.config_path = os.path.join(args.home, 'ftpvista.conf')
             install_services(args)
+            if args.webserver or args.all:
+                install_uwsgi_services(args)
         if args.logrotate or args.all:
+            if args.home is not None:
+                args.root = args.home
             install_logrotate(args)
+        if args.webserver or args.all:
+            if args.home is not None:
+                args.root = args.home
+                args.config_path = os.path.join(args.home, 'ftpvista.conf')
+            init_django(args)
+            install_uwsgi(args)
+            configure_apache()
         return 0
     elif args.action == 'uninstall':
         if args.user or args.all:
@@ -530,19 +628,31 @@ def init():
     parser.add_argument('--configuration', action='store_true', help='(Un)install configuration file and FTPVista root directory', default=False)
     parser.add_argument('--services', action='store_true', help='(Un)install upstart or systemd services scripts', default=False)
     parser.add_argument('--logrotate', action='store_true', help='(Un)install logrotate configuration file', default=False)
-    parser.add_argument('--website', action='store_true', help='Initialize Django', default=False)
+    parser.add_argument('--webserver', action='store_true', help='(Un)install uwsgi script and create apache Virtual Host', default=False)
     parser.add_argument('--all', action='store_true', help='(Un)install everything')
     subparsers = parser.add_subparsers(dest='action')
-    subparsers.add_parser('install', help='Install FTPVista system elements')
+    parser_install = subparsers.add_parser('install', help='Install FTPVista system elements')
+    parser_install.add_argument('home', help='FTPVista home path', nargs='?', default=None)
     parser_uninstall = subparsers.add_parser('uninstall', help='Uninstall FTPVista system elements')
     parser_uninstall.add_argument('home', help='FTPVista home path')
     args = parser.parse_args()
 
-    if not args.user and not args.configuration and not args.services and not args.logrotate and not args.website:
+    if not args.action:
+        parser.print_help()
+        exit(1)
+
+    if not args.user and not args.configuration and not args.services and not args.logrotate and not args.webserver:
         args.all = True
+
+    if args.configuration and not args.all:
+        args.user = True
 
     if os.getuid() != 0:
         print("You must be root in order to run FTPVista installer. Exiting.")
+        exit(1)
+
+    if args.action == 'install' and not args.all and args.home is None and (args.services or args.logrotate or args.webserver):
+        print(w('home parameter is mandatory here. (install.py --abc install <home>)'))
         exit(1)
 
     return main(args)

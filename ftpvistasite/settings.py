@@ -13,13 +13,18 @@ https://docs.djangoproject.com/en/1.8/ref/settings/
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 import os
 import configparser
+try:
+    import uwsgi
+    config_path = uwsgi.opt['config_path']
+except ImportError:
+    config_path = os.environ['CONFIG_PATH']
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Custom FTPVista config
 config = configparser.SafeConfigParser()
-config.read(os.path.join(BASE_DIR, 'ftpvista.conf'))
-
+with open(config_path, 'r') as cr:
+    config.read_file(cr)
 WHOOSH_IDX = config.get('index', 'uri')
 PERSIST_DB = config.get('db', 'uri')
 
@@ -33,6 +38,7 @@ SECRET_KEY = config.get('django', 'secret_key', raw=True)
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config.getboolean('django', 'debug')
+DEBUG = True
 
 ALLOWED_HOSTS = []
 
