@@ -196,7 +196,6 @@ class FileIndexerContext(pipeline.Context):
         return self._extra_data
 
 
-# TODO See https://pypi.python.org/pypi/tinytag/0.9.3 and http://ask.slashdot.org/comments.pl?sid=107983&cid=9185451
 class FetchID3TagsStage(pipeline.Stage):
     """Pipeline stage to find the ID3 tags of audio files."""
 
@@ -318,7 +317,7 @@ class WriteDataStage(pipeline.Stage):
                 return None
 
         path = context.get_path()
-        self.log.debug("Adding '%s' in the index" % path)
+        self.log.debug("Adding '%s' in the index", path)
         self._index.add_document(
             server_id=str(self._server_id),
             name=os.path.basename(path),

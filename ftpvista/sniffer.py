@@ -10,6 +10,7 @@ from .pipeline import Pipeline
 from .timedcache import TimedCache
 from .ftp_tools import FTPTools
 import time
+import ipaddress
 
 
 class ARPScanner (observer.Observable):
@@ -91,13 +92,13 @@ class BlacklistFilter (pipeline.Stage):
 
 
 class ValidAddressFilter (pipeline.Stage):
-    """Filter out the addresses not matching a given pattern"""
+    """Filter out the addresses not matching the subnet"""
 
-    def __init__(self, pattern):
-        self.VALID_IP_PATTERN = re.compile(pattern)
+    def __init__(self, subnet):
+        self.network = ipaddress.ip_network(subnet)
 
     def execute(self, ip_addr):
-        return re.match(self.VALID_IP_PATTERN, ip_addr) is not None
+        return self.network.overlaps(ipaddress.ip_network(ip_addr + '/32'))
 
 
 class DropRecentDuplicateFilter (pipeline.Stage):
@@ -135,10 +136,10 @@ class PutInQueueStage (pipeline.Stage):
         return True
 
 
-def build_machine_filter_pipeline(queue, blacklist, valid_addr_pattern, drop_duplicate_timeout):
+def build_machine_filter_pipeline(queue, blacklist, subnet, drop_duplicate_timeout):
     pipeline = Pipeline()
     pipeline.append_stage(BlacklistFilter(blacklist))
-    pipeline.append_stage(ValidAddressFilter(valid_addr_pattern))
+    pipeline.append_stage(ValidAddressFilter(subnet))
     pipeline.append_stage(DropRecentDuplicateFilter(drop_duplicate_timeout))
     pipeline.append_stage(FTPServerFilter())
     pipeline.append_stage(PutInQueueStage(queue))

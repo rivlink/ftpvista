@@ -11,6 +11,7 @@ Environnement Linux, avec droits d'administration.
 ### Dev
 python3 manage.py migrate
 python3 manage.py createsuperuser
+pip3 install colorama
 aptitude install uwsgi uwsgi-plugin-python3
 ```
 sudo pip3 install pyftpdlib

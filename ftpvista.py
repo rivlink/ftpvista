@@ -8,6 +8,7 @@ import socket
 import os
 import traceback
 import shutil
+from colorama import init as colorama_init, Fore
 from datetime import timedelta
 from multiprocessing import Queue
 from ftpvista.index import Index, IndexUpdateCoordinator
@@ -18,12 +19,12 @@ from ftpvista.sniffer import *
 os.environ['TZ'] = 'CET'
 
 
-def sniffer_task(queue, blacklist, valid_ip_pattern, subnet, scanner_interval):
+def sniffer_task(queue, blacklist, subnet, scanner_interval):
     # create an ARP sniffer for discovering the hosts
     # sniffer = ARPSniffer()
     sniffer = ARPScanner(subnet, scanner_interval)
     # Bind the sniffer to a filtering pipeline to discard uninteresting IP
-    apipeline = build_machine_filter_pipeline(queue, blacklist, valid_ip_pattern, drop_duplicate_timeout=10*60)
+    apipeline = build_machine_filter_pipeline(queue, blacklist, subnet, drop_duplicate_timeout=10*60)
     SnifferToPipelineAdapter(sniffer, apipeline)
 
     # Run sniffer, run ..
@@ -86,9 +87,10 @@ def clean_index(config):
 
 
 def check_online(config):
+    handler = logging.FileHandler(config.get('logs', 'online_checker'), encoding='utf-8')
     logging.basicConfig(level=logging.DEBUG,
                         format='%(asctime)s %(levelname)s:%(name)s:%(message)s',
-                        filename=config.get('logs', 'online_checker'))
+                        handlers=[handler])
     log = logging.getLogger('ftpvista')
     log.info('Starting online servers checker')
 
@@ -118,11 +120,11 @@ def get_index(config, persist):
     return Index(index_uri, persist)
 
 
-def main_daemonized(config, ftpserver_queue):
-
+def main_process(config, ftpserver_queue):
+    handler = logging.FileHandler(config.get('logs', 'main'), encoding='utf-8')
     logging.basicConfig(level=logging.DEBUG,
                         format='%(asctime)s %(levelname)s:%(name)s:%(message)s',
-                        filename=config.get('logs', 'main'))
+                        handlers=[handler])
 
     log = logging.getLogger('ftpvista')
     log.info('Starting FTPVista')
@@ -165,7 +167,7 @@ def main(args):
     config.read(args.config_file)
 
     if args.action == 'clean':
-        question = 'Do you really want to clean ftpvista {clean: %s} (make sure there is no running instances of FTPVista) ?' % args.subject
+        question = Fore.YELLOW + 'Do you really want to clean ftpvista {clean: %s}%s (make sure there is no running instances of FTPVista) ?' % (args.subject, Fore.RESET)
         fct = None
         if args.subject == 'all':
             fct = clean_all
@@ -179,7 +181,7 @@ def main(args):
             launch(config, fct, (config,))
         return 0
     elif args.action == 'delete':
-        if _q('Do you really want to delete server %s ?' % args.server):
+        if _q(Fore.YELLOW + 'Do you really want to delete server %s ?' + Fore.RESET % args.server):
             launch(config, delete_server, (config, args.server))
         return 0
 
@@ -198,27 +200,28 @@ def main(args):
         blacklist = blacklist.split(',')
     else:
         blacklist = []
-    valid_ip_pattern = config.get('indexer', 'valid_ip_pattern')
     scanner_interval = config.getint('indexer', 'scanner_interval')
     subnet = config.get('indexer', 'subnet')
 
     try:
         if args.action == 'start':
-            OwnedProcess(uid=uid, gid=gid, target=main_daemonized, args=(config, ftpserver_queue)).start()
-            OwnedProcess(target=sniffer_task, args=(ftpserver_queue, blacklist, valid_ip_pattern, subnet, scanner_interval)).start()
+            OwnedProcess(uid=uid, gid=gid, target=main_process, args=(config, ftpserver_queue)).start()
+            OwnedProcess(target=sniffer_task, args=(ftpserver_queue, blacklist, subnet, scanner_interval)).start()
         elif args.action == 'start-oc':
             OwnedProcess(target=check_online, args=(config,)).start()
         OwnedProcess.joinall()
     except Exception:
+        handler = logging.FileHandler(config.get('logs', 'main'), encoding='utf-8')
         logging.basicConfig(level=logging.DEBUG,
                             format='%(asctime)s %(levelname)s:%(name)s:%(message)s',
-                            filename=config.get('logs', 'main'))
+                            handlers=[handler])
         log = logging.getLogger('ftpvista.main')
         log.error('Error in main : %s', traceback.format_exc())
         raise
 
 
 def init():
+    colorama_init()
     dirname = os.path.dirname(os.path.abspath(__file__))
     parser = argparse.ArgumentParser(description="FTPVista 4.0")
     parser.add_argument("-c", "--config", dest="config_file", metavar="FILE", default=os.path.join(dirname, 'ftpvista.conf'), help="Path to the config file")
