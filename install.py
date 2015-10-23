@@ -13,6 +13,7 @@ import readline
 import ipaddress
 import subprocess
 import configparser
+from manage import execute
 from colorama import init as colorama_init, Fore
 
 
@@ -387,7 +388,7 @@ def install_user(args):
                 exit(3)
         else:
             subprocess.call(["useradd", args.uname, "-m", "-u", str(args.uid), "-g", args.gname], stdout=f)
-            print(s("User {} uid({}) succesfully added.".format(args.uname, args.uid)))
+            print(s("User {} uid({}) successfully added.".format(args.uname, args.uid)))
     return 0
 
 
@@ -407,7 +408,7 @@ def uninstall_user(args, config):
             if a.ask(YesNo('Are you sure you want to remove user {} and group {} ?'.format(uname, gname))):
                 subprocess.call(["deluser", "--remove-home", "--quiet", uname], stdout=f)
                 subprocess.call(["delgroup", "--remove-home", "--quiet", gname], stdout=f)
-                print(s('User succesfully deleted.'))
+                print(s('User successfully deleted.'))
             else:
                 print('Skipping user deletion.')
     else:
@@ -471,9 +472,15 @@ def uninstall_configuration(args):
     a = Ask()
     if a.ask(YesNo('Delete {} directory ?'.format(args.home))):
         shutil.rmtree(args.home)
-        print(s(args.home + ' succesfully deleted.'))
+        print(s(args.home + ' successfully deleted.'))
     else:
         print(args.home, 'not deleted.')
+
+
+def init_django():
+    execute(['migrate', 'migrate'])
+    execute(['migrate', 'createsuperuser'])
+    print(s('Django initialisation successful.'))
 
 
 def check_home(args):
@@ -491,6 +498,8 @@ def main(args):
             install_user(args)
         if args.configuration or args.all:
             install_configuration(args)
+        if args.website or args.all:
+            init_django()
         if args.services or args.all:
             install_services(args)
         if args.logrotate or args.all:
@@ -517,10 +526,11 @@ def main(args):
 def init():
     colorama_init()
     parser = argparse.ArgumentParser(description="FTPVista 4.0 installer")
-    parser.add_argument('--user', action='store_true', help='Create/delete unix user of FTPVista')
-    parser.add_argument('--configuration', action='store_true', help='(Un)install configuration file and FTPVista root directory')
-    parser.add_argument('--services', action='store_true', help='(Un)install upstart or systemd services scripts')
-    parser.add_argument('--logrotate', action='store_true', help='(Un)install logrotate configuration file')
+    parser.add_argument('--user', action='store_true', help='Create/delete unix user of FTPVista', default=False)
+    parser.add_argument('--configuration', action='store_true', help='(Un)install configuration file and FTPVista root directory', default=False)
+    parser.add_argument('--services', action='store_true', help='(Un)install upstart or systemd services scripts', default=False)
+    parser.add_argument('--logrotate', action='store_true', help='(Un)install logrotate configuration file', default=False)
+    parser.add_argument('--website', action='store_true', help='Initialize Django', default=False)
     parser.add_argument('--all', action='store_true', help='(Un)install everything')
     subparsers = parser.add_subparsers(dest='action')
     subparsers.add_parser('install', help='Install FTPVista system elements')
@@ -528,7 +538,7 @@ def init():
     parser_uninstall.add_argument('home', help='FTPVista home path')
     args = parser.parse_args()
 
-    if not args.user and not args.configuration and not args.services and not args.logrotate:
+    if not args.user and not args.configuration and not args.services and not args.logrotate and not args.website:
         args.all = True
 
     if os.getuid() != 0:
