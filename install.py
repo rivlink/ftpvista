@@ -624,22 +624,31 @@ def main(args):
 def init():
     colorama_init()
     parser = argparse.ArgumentParser(description="FTPVista 4.0 installer")
-    parser.add_argument('--user', action='store_true', help='Create/delete unix user of FTPVista', default=False)
-    parser.add_argument('--configuration', action='store_true', help='(Un)install configuration file and FTPVista root directory', default=False)
-    parser.add_argument('--services', action='store_true', help='(Un)install upstart or systemd services scripts', default=False)
-    parser.add_argument('--logrotate', action='store_true', help='(Un)install logrotate configuration file', default=False)
-    parser.add_argument('--webserver', action='store_true', help='(Un)install uwsgi script and create apache Virtual Host', default=False)
-    parser.add_argument('--all', action='store_true', help='(Un)install everything')
     subparsers = parser.add_subparsers(dest='action')
     parser_install = subparsers.add_parser('install', help='Install FTPVista system elements')
+    parser_install.add_argument('--user', action='store_true', help='Create/delete unix user of FTPVista', default=False)
+    parser_install.add_argument('--configuration', action='store_true', help='(Un)install configuration file and FTPVista root directory', default=False)
+    parser_install.add_argument('--services', action='store_true', help='(Un)install upstart or systemd services scripts', default=False)
+    parser_install.add_argument('--logrotate', action='store_true', help='(Un)install logrotate configuration file', default=False)
+    parser_install.add_argument('--webserver', action='store_true', help='(Un)install uwsgi script and create apache Virtual Host', default=False)
+    parser_install.add_argument('--all', action='store_true', help='(Un)install everything')
     parser_install.add_argument('home', help='FTPVista home path', nargs='?', default=None)
     parser_uninstall = subparsers.add_parser('uninstall', help='Uninstall FTPVista system elements')
+    parser_uninstall.add_argument('--user', action='store_true', help='Create/delete unix user of FTPVista', default=False)
+    parser_uninstall.add_argument('--configuration', action='store_true', help='(Un)install configuration file and FTPVista root directory', default=False)
+    parser_uninstall.add_argument('--services', action='store_true', help='(Un)install upstart or systemd services scripts', default=False)
+    parser_uninstall.add_argument('--logrotate', action='store_true', help='(Un)install logrotate configuration file', default=False)
+    parser_uninstall.add_argument('--all', action='store_true', help='(Un)install everything')
     parser_uninstall.add_argument('home', help='FTPVista home path')
     args = parser.parse_args()
 
     if not args.action:
         parser.print_help()
         exit(1)
+
+    # For simplicity
+    if not hasattr(args, 'webserver'):
+        args.webserver = False
 
     if not args.user and not args.configuration and not args.services and not args.logrotate and not args.webserver:
         args.all = True
@@ -652,7 +661,7 @@ def init():
         exit(1)
 
     if args.action == 'install' and not args.all and args.home is None and (args.services or args.logrotate or args.webserver):
-        print(w('home parameter is mandatory here. (install.py --abc install <home>)'))
+        print(w('home parameter is mandatory here. (e.g. install.py install --abc <home>)'))
         exit(1)
 
     return main(args)
