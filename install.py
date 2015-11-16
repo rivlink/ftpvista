@@ -295,8 +295,8 @@ stop on runlevel [06]
 console log
 chdir {chdir}
 env LANG="en_US.UTF-8"
-setuid {uid}
-setgid {gid}
+setuid {user}
+setgid {group}
 
 respawn
 
@@ -330,7 +330,7 @@ WantedBy=multi-user.target
         elif args.service == 'upstart':
             if a.ask(YesNo('Create /etc/init/ftpvista-uwsgi.conf ?')):
                 with open('/etc/init/ftpvista-uwsgi.conf', 'w') as ws:
-                    ws.write(fupstart.format(chdir=dirname, root=args.root, uid=args.uid, gid=args.gid))
+                    ws.write(fupstart.format(chdir=dirname, root=args.root, uid=args.uname, gid=args.gname))
                 print(s("File successfully installed."))
 
 
