@@ -16,7 +16,7 @@ import configparser
 try:
     import uwsgi
     config_path = uwsgi.opt['config_path']
-    STATIC_URL = uwsgi.opt['static_url']
+    STATIC_URL = uwsgi.opt['static_url'].decode()
 except ImportError:
     config_path = os.environ['CONFIG_PATH']
     STATIC_URL = '/static/'
