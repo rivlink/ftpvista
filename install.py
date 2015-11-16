@@ -545,7 +545,7 @@ socket=127.0.0.1:15600
 module=ftpvistasite.wsgi:application
 master=True
 plugins=python3
-static-map=/static=%d/ftpvistasite/static
+static-map=/static={chdir}/ftpvistasite/static
 config_path={config_path}"""
     dirname = os.path.dirname(os.path.abspath(__file__))
     uwsgi_path = os.path.join(args.root, 'ftpvista.uwsgi')

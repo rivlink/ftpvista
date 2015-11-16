@@ -24,6 +24,12 @@ Le `-g 4000` pour la commande `groupadd` et le `-u 4000` pour la commande `usera
 ```
 aptitude install python3 python3-pip uwsgi uwsgi-plugin-python3 python3-pycurl
 ```
+And if using apache
+```
+aptitude install libapache2-mod-proxy-uwsgi
+a2enmod proxy
+a2enmod proxy_uwsgi
+```
 Pour toute autre distrib, vous référez à sa documentation.
 
   * Il faut aussi installer les dépendances python requises (_scapy_ [v2.2 min.], _sqlalchemy_ et _django_ [v1.8 min.]):
