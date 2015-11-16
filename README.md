@@ -2,7 +2,7 @@
 
 FTPVista est un moteur d'indexation et de recherche de serveurs FTP.
 
-Il est actuellement en version 4.0 et codé en [Python 3](http:_python.org/) (>=3.4).
+Il est actuellement en version 4.0 et codé en [Python 3](http://python.org/) (>=3.4).
 
 ## Installation
 ### Prérequis
@@ -11,11 +11,6 @@ Environnement Linux, avec droits d'administration.
 ### Dev
 python3 manage.py migrate
 python3 manage.py createsuperuser
-pip3 install colorama
-aptitude install uwsgi uwsgi-plugin-python3
-```
-sudo pip3 install pyftpdlib
-```
 
 ### Préparation de l'environnement
 Pour pouvoir faire fonctionner FTPVista en local sur votre machine, il faut:
@@ -27,14 +22,14 @@ useradd ftpvista -m -u 4000 -g ftpvista
 Le `-g 4000` pour la commande `groupadd` et le `-u 4000` pour la commande `useradd` affectent respectivement un gid et un uid à ftpvista. Il est possible de spécifier tout autre uid et gid non déjà utilisé par le système. Ces paramètres seront spécifiés dans le fichier de configuration.
   * Installer un environnement Python. Pour se faire il faut executer la commande suivante (sous [Debian](http://www.debian.org)):
 ```
-aptitude install python3 python3-pip
+aptitude install python3 python3-pip uwsgi uwsgi-plugin-python3 python3-pycurl
 ```
 Pour toute autre distrib, vous référez à sa documentation.
 
   * Il faut aussi installer les dépendances python requises (_scapy_ [v2.2 min.], _sqlalchemy_ et _django_ [v1.8 min.]):
 ```
 aptitude install python3-sqlalchemy
-pip3 install Whoosh scapy-python3 django
+pip3 install Whoosh scapy-python3 django pyftpdlib colorama
 ```
 
 

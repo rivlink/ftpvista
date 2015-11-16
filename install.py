@@ -300,7 +300,7 @@ setgid {gid}
 
 respawn
 
-exec uwsgi --ini {root}/festival.uwsgi
+exec uwsgi --ini {root}/ftpvista.uwsgi
 """
         fsystemd = """[Unit]
 Description=FTPVista uwsgi instance
