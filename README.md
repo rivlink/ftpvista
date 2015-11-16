@@ -22,6 +22,8 @@ sudo pip3 install Whoosh scapy-python3 django pyftpdlib colorama
 
 ### Install
 FTPVista includes an interactive installation script to ease the installation process.
+
+First clone this repository, `cd` to the newly created dir, then
 ```
 python3 install.py install
 ```
