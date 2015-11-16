@@ -546,7 +546,8 @@ module=ftpvistasite.wsgi:application
 master=True
 plugins=python3
 static-map=/static={chdir}/ftpvistasite/static
-config_path={config_path}"""
+config_path={config_path}
+static_url=/ftpvista/static/"""
     dirname = os.path.dirname(os.path.abspath(__file__))
     uwsgi_path = os.path.join(args.root, 'ftpvista.uwsgi')
     with open(uwsgi_path, 'w') as wf:
