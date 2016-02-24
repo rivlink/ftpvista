@@ -6,6 +6,7 @@ import configparser
 import argparse
 import socket
 import os
+import sys
 import traceback
 import shutil
 from colorama import init as colorama_init, Fore
@@ -50,12 +51,12 @@ def delete_server(config, sserver):
         log.info('No server found corresponding to %s', sserver)
 
 
-def clean_all(config):
-    clean_db(config)
+def clean_all(config, args):
+    clean_db(config, args)
     clean_index(config)
 
 
-def clean_db(config):
+def clean_db(config, args):
     logging.basicConfig(level=logging.DEBUG,
                         format='[%(asctime)s] %(message)s')
     log = logging.getLogger('ftpvista.clean_db')
@@ -68,11 +69,23 @@ def clean_db(config):
         persist.initialize_store()
         os.remove(uri_strip)
         log.info("Database deleted")
+        init_django(config, args)
     else:
         log.info("No database : skipping.")
 
 
-def clean_index(config):
+def init_django(config, args):
+    sys.stdin = open(0)
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "ftpvistasite.settings")
+    os.environ.setdefault("CONFIG_PATH", args.config_file)
+    from django.core.management import execute_from_command_line
+    print(Fore.BLUE + 'Django database' + Fore.BLUE)
+    execute_from_command_line(['migrate', 'migrate'])
+    print(Fore.BLUE + 'Django admin user' + Fore.BLUE)
+    execute_from_command_line(['migrate', 'createsuperuser'])
+
+
+def clean_index(config, _):
     logging.basicConfig(level=logging.DEBUG,
                         format='[%(asctime)s] %(message)s')
     log = logging.getLogger('ftpvista.clean_index')
@@ -151,9 +164,9 @@ def main_process(config, ftpserver_queue):
         update_coordinator.update_server(ftpserver_queue.get())
 
 
-def launch(config, func, args):
-    uid = config.getint('indexer', 'uid')
-    gid = config.getint('indexer', 'gid')
+def launch(config, func, args, category='indexer'):
+    uid = config.getint(category, 'uid')
+    gid = config.getint(category, 'gid')
     OwnedProcess(uid=uid, gid=gid, target=func, args=args).start()
 
 
@@ -178,12 +191,14 @@ def main(args):
         else:
             raise Exception("Invalid value %s" % args.subject)
         if _q(question):
-            launch(config, fct, (config,))
+            launch(config, fct, (config, args))
         return 0
     elif args.action == 'delete':
         if _q(Fore.YELLOW + 'Do you really want to delete server %s ?' + Fore.RESET % args.server):
             launch(config, delete_server, (config, args.server))
         return 0
+    elif args.action == 'init':
+        launch(config, init_django, (config, args), 'online_checker')
 
     # From now we can set the application to use a different user id and group id
     # much better for security reasons
@@ -226,6 +241,8 @@ def init():
     parser = argparse.ArgumentParser(description="FTPVista 4.0")
     parser.add_argument("-c", "--config", dest="config_file", metavar="FILE", default=os.path.join(dirname, 'ftpvista.conf'), help="Path to the config file")
     subparsers = parser.add_subparsers(dest='action')
+    # init
+    subparsers.add_parser('init', help='Initialize FTPVista database')
     # start
     subparsers.add_parser('start', help='Start FTPVista')
     # start-oc
