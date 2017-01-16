@@ -6,7 +6,9 @@ import ftplib
 import os.path
 import logging
 import re
+import time
 from datetime import datetime
+from datetime import date
 
 
 class TooDeepError(Exception):
@@ -66,6 +68,56 @@ class FTPScanner(object):
     def disconnect(self):
         self.ftp.quit()
 
+    def scan_legacy(self, parse_line):
+        i = 0;
+        items = []
+        names = self.ftp.nlst()
+        self.ftp.retrlines('LIST', items.append)
+        for it in items:
+            items[i] = it.replace(' ' + names[i], '')
+            i+=1
+        items = [item.split() for item in items]
+        i = 0
+        for name in names:
+            items[i].append(name)
+            i+=1
+
+        def interpret_line(line):
+            import datetime
+            import time
+            filename = line.pop()
+            hour = line.pop()
+            day = line.pop()
+            month = line.pop()
+            size = line.pop()
+            if re.match('([0-9]+)\:([0-9])', hour):
+                year = str(datetime.date.today().year)
+            else:
+                year = hour
+                hour = '00:00'
+            fulldate = '%s:%s:%s:%s' % (month, day, hour, year)
+            try :
+                modify = str(time.mktime(datetime.datetime.strptime(fulldate, "%b:%j:%H:%S:%Y").timetuple()))
+            except: modify = '0'
+            if filename == '.':
+                typ = 'cdir'
+            elif filename == '..':
+                typ = 'pdir'
+            elif line[0][0] == 'd':
+                typ = 'dir'
+            else:
+                typ = 'file'
+            if typ == 'file':
+                perm = 'adfrw'
+            else:
+                perm = 'flcdmpe'
+            return (filename, {'perm': perm, 'type': typ, 'modify': modify, 'size': size})
+
+        for line in items:
+            filename, facts = interpret_line(line)
+            parse_line(filename, facts)
+
+
     def list_files(self, dir):
         extra_dirs = []
         files = []
@@ -98,8 +150,11 @@ class FTPScanner(object):
                         return
 
         self.ftp.cwd(dir)
-        for filename, facts in self.ftp.mlsd(facts=["type", "size", "perm", "modify"]):
-            parse_line(filename, facts)
+        try:
+            for filename, facts in self.ftp.mlsd(facts=["type", "size", "perm", "modify"]):
+                parse_line(filename, facts)
+        except:
+            self.scan_legacy(parse_line)
 
         return files, extra_dirs
 
