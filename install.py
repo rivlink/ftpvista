@@ -309,7 +309,7 @@ After=network.target
 [Service]
 User={uid}
 Group={gid}
-ExecStart=/usr/bin/uwsgi --ini {root}/festival.uwsgi
+ExecStart=/usr/bin/uwsgi --ini {root}/ftpvista.uwsgi
 WorkingDirectory={chdir}
 Restart=always
 KillSignal=SIGQUIT
