@@ -81,6 +81,11 @@ class FTPScanner(object):
             line.pop(0)
             size = line.pop(0)
             month = line.pop(0)
+            month = datetime.datetime.strptime(month, "%b").month
+            if month < 10:
+                month = '0%d' % month
+            else:
+                month = str(month)
             day = line.pop(0)
             hour = line.pop(0)
             if re.match('([0-9]+)\:([0-9])', hour):
@@ -88,8 +93,8 @@ class FTPScanner(object):
             else:
                 year = hour
                 hour = '00:00'
-            fulldate = '%s:%s:%s:%s' % (month, day, hour, year)
-            modify = str(time.mktime(datetime.datetime.strptime(fulldate, "%b:%j:%H:%S:%Y").timetuple()))
+            hour = re.sub(':', '', hour)
+            modify = '%s%s%s%s00' % (year, month, day, hour)
             if file_name == '.':
                 typ = 'cdir'
             elif file_name == '..':
@@ -146,8 +151,9 @@ class FTPScanner(object):
         try:
             for filename, facts in self.ftp.mlsd(facts=["type", "size", "perm", "modify"]):
                 parse_line(filename, facts)
-        except:
-            self.scan_legacy(parse_line)
+        except ftplib.error_perm as e:
+            if str(e).split()[0] == '501':
+                self.scan_legacy(parse_line)
 
         return files, extra_dirs
 
